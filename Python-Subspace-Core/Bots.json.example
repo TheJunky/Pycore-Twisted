@@ -1,0 +1,54 @@
+{
+	"Host" : "66.235.184.102",
+	"Port" : 7900,
+	"MasterName" : "BOT-chin-PyMstr",
+	"MasterPassword" : "",
+	"MasterArena" : "#master", 
+	"ConfigurationFile" : "Master.ini",
+	"Modules" :
+	[
+		
+	],
+	"Paths":
+	[
+		"D:\\workspace\\pybot\\src",
+		"D:\\workspace\\pybot\\src\\junky",
+		"D:\\workspace\\pybot\\src\\junky\\chin"
+	],
+
+	"AutoLoad":
+	[
+		{"Type":"web","Arena":"#master"}
+	
+	],
+
+	"Bots":
+	[
+		{ 
+			"Type" : "t1", 
+			"Name" : "Bot-chin-1", 
+			"Password" :"",
+			"Description" : "Allows mods to post to various websites,twitter,etc", 
+			"ConfigurationFile" : "chin1.ini", 
+			"MaxBots" : 1,
+			"MinLevel" : 1,
+			"Modules": 
+			[
+				{"Name" : "chin1", "Param" :""}
+			]
+		},
+		{ 
+			"Type" : "t2", 
+			"Name" : "Bot-chin-2", 
+			"Password" :"",
+			"Description" : "TestBot 1", 
+			"ConfigurationFile" : "chin2.ini", 
+			"MaxBots" : 1,
+			"MinLevel" : 1,
+			"Modules": 
+			[
+				{"Name" : "chin2", "Param" :"WTF"}
+			]
+		}
+	]
+}

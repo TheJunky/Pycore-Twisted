@@ -1,0 +1,118 @@
+if you arent familiar with python:
+read through:
+python docs: http://www.python.org/dev/
+a byte of python: http://www.swaroopch.com/notes/Python_en:Table_of_Contents
+python style guide: http://www.python.org/dev/peps/pep-0008/
+
+once you are familiar with python:
+
+Download All The files in this directory 
+http://extreme-games.net/junky/python/core/
+1st read through the Subspacebot.py
+- this is the basic api for programming bots
+- you will be responding to events
+- and using things like ssbot.sendPrivateMessage(event.player,"hi") and
+ other commands to respond to events
+ 
+
+Rename Credentials-example.py to Credentials.py
+- modify the credentials file
+- put your botname/password into it 
+either make a new copy of Ops.ini and add your name to it or add your name 9:yourname 
+to the one provided to you.
+ops.ini is just a access list for the bots.. lvls go from 1-9 
+9 being the highest level 1 being ref/mod/whatever
+
+bots can be made in a couple of ways:
+
+method 1:
+simple way: this is ok if you want to just mess around and learn how things work:
+make a file whatever.py make sure you have all the core files in the same dir
+ including the ops.ini and Credientials.py
+
+the following bot will just arena message on every kill
+[code]
+#the following line imports your username/pass and your name 
+from Credentials import botowner, botname, botpassword
+#the following line imports the actual programming interface
+from SubspaceBot import *
+
+
+if __name__ == '__main__':
+	bot = SubspaceBot()#create a new bot interface
+	
+	#connect to the server
+	bot.connectToServer('66.235.184.102', 7900, botname, botpassword, '#python')
+	#addsome info so when players do !about it can be displayed
+	bot.setBotInfo(__name__,"This bot announces kills to the arena", botowner)
+	print "Bot connected to server"
+	
+	while bot.isConnected():#ewhile bot is connected to server 
+		event = bot.waitForEvent()
+		if event.type == EVENT_KILL:#someone got killed
+			#print that shit out in an arena message
+			bot.sendArenaMessage(event.killer.name + ' killed ' + event.killed.name + '!')
+		
+	print "Bot disconnected"
+[/code]
+
+method 2:
+copy template.py o a new file "whatever.py"
+now this version is compatible with eg's master bot system
+in this version you only need to put code into the Bot class
+the master bot will call your bots __init__ function when the bot is created
+it will then call HandleEvents everytime an event is generated and finally
+it will callCleanup when the bot is shutdown
+
+so lets clone the above bot using template... all code other then the bot class
+ommited for clarity
+[code]
+#...code ommited...
+class Bot(BotInterface):
+	def __init__(self,ssbot,md):#initialize your bot add whatever variables you want etc etc
+		BotInterface.__init__(self,ssbot,md)
+		#register Your Module
+		ssbot.registerModuleInfo(__name__,"killer","someone","KillerBot",".01")
+	def HandleEvents(self,ssbot,event):
+		if event.type==EVENT_KILL:
+			ssbot.sendArenaMessage(event.killer.name + ' killed ' + event.killed.name + '!')
+	def Cleanup(self):
+		pass
+#code ommited...
+[/code]
+
+at this point if you use method2 you only have to worry about these 3 methods
+of the bot class you can ignore the rest. this will work as a standalone bot script
+using your Credientials as the bot name and can also be called by the master
+
+3rd way:
+is to use the master....
+1 way is to use the master thats already running, i will give you an account to upload your
+files and u upload and run them on the remote server:
+the bot coding is same as method2 mentioned above using the template as a starting point
+chins post is also usefull so read through that as well. he has a more comprehensive guide
+for converting method1->method2/3 and i wont replicate that information here
+see: http://www.extreme-games.net/phpBB3/viewtopic.php?f=43&t=24199
+Master configuration is done in 2 files
+Bots.json, ops.ini
+ops.ini is just a access list for the bots.. lvls go from 1-9 
+9 being the highest level 1 being ref/mod/whatever
+Bots.json defines all the files , bots, names the master bot will use.
+an example is provided bots.json.example should be fairly self explanitory
+be aware the json syntax is very unforgiving, a missing (, [ {) 
+will result in your bot not loading. i [lan to replace json at some point
+but have been too lazy thus far.
+for more on json.... http://www.json.org/
+
+
+
+
+
+
+
+
+
+
+
+
+ 
