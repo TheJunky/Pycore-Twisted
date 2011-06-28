@@ -9,14 +9,18 @@ import select
 import time
 import traceback
 import SubspaceEncryption
+import ctypes
 from SubspaceFileChecksum import FileChecksum
+
+g_select = select.select
+
 
 def GetTickCountHs():
 	"""Tick count in hundreths of a second."""
 	# this is win32 only, so it isnt used here out of compatibility reasons
-	#return (ctypes.dll.kernel32.GetTickCount() / 10) & 0xFFFFFFFF
+	return (ctypes.windll.kernel32.GetTickCount() / 10) & 0xFFFFFFFF
 	
-	return int(time.time() * 100) & 0xFFFFFFFF
+	#return int(time.time() * 100) & 0xFFFFFFFF
 
 def TickDiff(now, base):
 	"""Returns the difference between two 32-bit tick counts."""
@@ -195,26 +199,42 @@ class CoreStack:
 		else:
 			self.__connected = True
 	
-	
-	def queueHugeChunkPacket(self, data, reliable=True, priority=PRIORITY_HIGH):
-		size = len(data)
-		offset =0 
-		print "huge chunk total size:" + str(size)
-		MAX_CHUNK = MAX_PACKET - 12# 6 for reliable header + 6 for packet header
-		while(len(data)> 0):
-			chunk_size = min(MAX_CHUNK,len(data))
-			packet = struct.pack("<BBI",0x00,0x0a,size) 
-			packet += data[0:chunk_size-1]
-			data = data[chunk_size:]
-			print "packet_size: %d Remaining Data:%d" % (chunk_size, len(data)) 
-			#packet+= data[offset:offset+chunk_size-1]
-			#print "offset: %10i: chunksize:%10i" %(offset,chunk_size)
-			#offset+=chunk_size
-			self.queuePacket(packet, reliable, priority)
 		
 	def queuePacket(self, data, reliable=False, priority=PRIORITY_NORMAL):
 		"""Queue a packet to be sent."""
-		self.__packet_queues[priority].append(QueuedPacket(data, reliable))
+		size = len(data)
+		psize = size + (6 if reliable else 0)
+		if psize < MAX_PACKET:
+			self.__packet_queues[priority].append(QueuedPacket(data, reliable))
+		else:
+			if size < (MAX_PACKET*100):
+				#print "chunk total size:" + str(len(data))
+				MAX_CHUNK = MAX_PACKET - 8# 6 for reliable header + 2 for packet header
+				while(len(data)> 0):
+					chunk_size = min(MAX_CHUNK,len(data))
+					remaining = len(data)- chunk_size
+					if remaining >0:
+						packet = struct.pack("<BB",0x00,0x08)
+						#print "Headpacket_size: %d Remaining Data:%d" % (chunk_size, remaining)  
+					else:
+						packet = struct.pack("<BB",0x00,0x09) 
+						#print "Tailpacket_size: %d Remaining Data:%d" % (chunk_size, remaining) 
+					packet += data[0:chunk_size-1]
+					data = data[chunk_size:]
+					self.__packet_queues[priority].append(QueuedPacket(packet, True))	
+			else:
+				#dont think this works when i putfile it seems to fail if it gets so big as to use huge chunk
+					offset =0 
+					print "huge chunk total size:" + str(size)
+					MAX_CHUNK = MAX_PACKET - 12# 6 for reliable header + 6 for packet header
+					
+					while(len(data)> 0):
+						chunk_size = min(MAX_CHUNK,len(data))
+						packet = struct.pack("<BBI",0x00,0x0a,size) 
+						packet += data[0:chunk_size-1]
+						data = data[chunk_size:]
+						print "packet_size: %d Remaining Data:%d" % (chunk_size, len(data))
+						self.__packet_queues[priority].append(QueuedPacket(packet, True)) 
 	
 	def __generateNextOutboundPacket(self):
 		"""Extract packets from queues and return a buffer containing the next outbound packet
@@ -295,7 +315,7 @@ class CoreStack:
 				break
 			
 			# check to make sure outbound socket is writable
-			rlist, wlist, xlist = select.select([], [self.__socket], [], 0)
+			rlist, wlist, xlist = g_select([], [self.__socket], [], 0)
 			if len(wlist) == 0: break
 		
 			packet = self.__generateNextOutboundPacket()
@@ -408,9 +428,9 @@ class CoreStack:
 			# if there are no packets to be sent, just wait for a read
 			# otherwise wait for a read or the outbound socket to be writable
 			if len(self.__packet_queues[PRIORITY_HIGH]) == 0 and len(self.__packet_queues[PRIORITY_NORMAL]) == 0:
-				select.select([self.__socket], [], [], timeout)
+				g_select([self.__socket], [], [], timeout)
 			else:
-				select.select([self.__socket], [self.__socket], [], timeout)
+				g_select([self.__socket], [self.__socket], [], timeout)
 	
 	def __processIncomingPackets(self):
 		"""Process all incoming packets."""
@@ -466,7 +486,7 @@ class CoreStack:
 				if handler:
 					handler(packet)
 				else:
-					self.info(INFO,"wtf corestack type %i not handled"%(type,))
+					self.__log(INFO,"wtf corestack type %i not handled"%(type,))
 			else:
 				if self.__debug:
 					self.__log(DEBUG, "Handling Game Type: 0x%02X" % type)
@@ -483,7 +503,7 @@ class CoreStack:
 			
 	def __readRawPacket(self, timeout):
 		"""Read a raw packet on the network, optionally blocking on the socket."""
-		rlist, wlist, xlist = select.select([self.__socket], [], [], timeout)
+		rlist, wlist, xlist = g_select([self.__socket], [], [], timeout)
 		if len(rlist) == 0:
 			return None
 		

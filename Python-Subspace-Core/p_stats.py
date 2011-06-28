@@ -7,7 +7,8 @@ import pstats
 
 		
 if __name__ == '__main__':
-	filename="bot-Wed-22-Sep-2010-21-27-46.profile"
+	filename="bots_python/bot-Tue-31-May-2011-18-13-22.profile"
 	p = pstats.Stats(filename)
-	p.print_stats()
+	p.sort_stats('cumulative')
+	p.print_stats(.1)
 	#p.strip_dirs().sort_stats(-1).print_stats()

@@ -14,6 +14,11 @@ import logging
 
 
 class AElement:
+	"""
+	Base Class For All items passed back and forth from the worker thread
+	you should always getType on all elements returned from the queue and use
+	the element accordingly
+	"""
 	
 	TYPE_NONE =0
 	TYPE_QUERY=1
@@ -24,6 +29,10 @@ class AElement:
 		return AElement.TYPE_NONE
 
 class AMessage(AElement):
+	"""
+	This is used to send commands to the worker thread (ping,terminate)
+	and recieve messages from the core such as connected/notconnected
+	"""
 	DB_NOT_CONNECTED = 0
 	DB_CONNECTED = 1
 	PING = 2
@@ -35,6 +44,9 @@ class AMessage(AElement):
 		return AElement.TYPE_MESSAGE
 
 class AQuery(AElement):
+	"""
+	Actual Queries 
+	"""
 	def __init__(self,query,query_tuple,extra_data):
 		self.text = query
 		self.tuple = query_tuple
@@ -45,6 +57,9 @@ class AQuery(AElement):
 
 				
 class AResult(AElement):
+	"""
+	Results of queries 
+	"""
 	def __init__(self):
 		self.messages = None
 		self.error_no = None
@@ -77,50 +92,7 @@ class AResult(AElement):
 			self.error_no  = e.args[0]
 			self.error_msg = e.args[1]
 
-	def GenericResultPrettyPrinterdefault(self,ssbot):
-		"""
-		this function will print any result nicely on screen with proper formatting 
-		"""
-		rp = ssbot.findPlayerByName(self.query.data)
-		if rp is None:
-			return
-		
-		if self.rows is None or len(self.rows) == 0:
-			if self.rows_affected:
-				ssbot.sendPrivateMessage(rp,"RowsAffected: " + str(self.rows_affected))
-			if self.last_row_id:
-				ssbot.sendPrivateMessage(rp,"InsertId: " + str(self.last_row_id))
-			if self.error_msg:
-				ssbot.sendPrivateMessage(rp,"Error: " + str(self.error_msg))
-			else:
-				ssbot.sendPrivateMessage(rp,"Query Successful: No Results")
-			if self.messages:
-				for m in self.messages:
-					ssbot.sendPrivateMessage(rp,"Messages: " + str(m))
-		else:
-			if not self.description:
-				ssbot.sendPrivateMessage(rp,"#### NO RESULTS ###")
-			else:
-				names = []
-				lengths = []
-				
-				for dd in self.description:	# iterate over description
-					names.append(dd[0])
-					lengths.append(len(dd[0]))#in case name is bigger then max len of data
-					
-				for row in self.rows: # get the max length of each column
-					for i in range(len(row)):
-						lengths[i] = max(lengths[i],len(str(row[i])))
-				tb = "-" * (sum(map(int,lengths))+(len(lengths) *3)+1)
-				fm = "|"
-				for col in lengths: #make the format string
-					fm += " %" + str(col) +"s |" 		
-				ssbot.sendPrivateMessage(rp,tb)
-				ssbot.sendPrivateMessage(rp,(fm%tuple(names)))
-				ssbot.sendPrivateMessage(rp,tb)		
-				for row in self.rows: #output the rows
-					ssbot.sendPrivateMessage(rp,(fm%row))
-				ssbot.sendPrivateMessage(rp,tb)
+
 	def GenericResultPrettyPrinter(self,ssbot,mtype,target):
 		"""
 		this function will print any result nicely on screen with proper formatting 
@@ -207,6 +179,11 @@ class Amysql(threading.Thread):
 		
 		#threading.Thread.start(self)
 	def setDBCredentials(self,host,port,user,password,db):
+		"""
+		function sets the information needed to login to the database
+		this function or setDbCredentialsFromFile must be used before 
+		you start() the worker thread
+		"""
 		self.__host = host
 		self.__port = port
 		self.__user = user
@@ -214,6 +191,11 @@ class Amysql(threading.Thread):
 		self.__db = db
 		
 	def setDbCredentialsFromFile(self,filename,section):
+		"""
+		function sets the information needed to login to the database
+		this function or setDbCredentialsFromFile must be used before 
+		you start() the worker thread
+		"""
 		config = ConfigParser.RawConfigParser()
 		config.read(filename)
 		self.__host = config.get(section, "host")
@@ -223,13 +205,32 @@ class Amysql(threading.Thread):
 		self.__db = config.get(section, "db")
 		
 	def query(self,query,query_tuple,extra_data):
+		"""
+		this function will queue a query to be executed on the worker
+		thread. query can be the actual query or the format string
+		querytuple can be none, or it can be a tuple of arges to be
+		inserted into the query format string, extra data can be anything 
+		you want. for example if the query is concerning a player or has
+		to be privd to a specific player on return u can pass a player name
+		"""
 		self.__enqueue_query(AQuery(query,query_tuple,extra_data))
 		
 	def ping(self):
+		"""
+		this function will request that a mysql_ping takes place on the worker thread
+		sometimes if a mysql connection didnt happen, or it has been idle too long
+		it will drop, ping will be used periodicly to keep the connection alive
+		"""
 		m = AMessage()
 		m.id = AMessage.PING
 		self.__enqueue_query(m)
-		
+	
+	def isConnected(self):
+		if self.conn:
+			return True
+		else:
+			return False
+			
 	def __enqueue_query(self,q):
 		self.__query_cond.acquire()
 		self.__query_queue.append(q)
@@ -237,6 +238,9 @@ class Amysql(threading.Thread):
 		self.__query_cond.release()
 		
 	def __connect_to_db(self):
+		"""
+		function connects to the db, used in the worker thread
+		"""
 		m = AMessage()
 		try:
 			
@@ -259,6 +263,9 @@ class Amysql(threading.Thread):
 		finally:
 			return m
 	def __execute_query(self,q):
+		"""
+		actually executed the query on the worker thread
+		"""
 		if(q == None):
 			return None;
 		if self.cursor:
@@ -277,6 +284,9 @@ class Amysql(threading.Thread):
 		self.__query_cond.release()
 		return q;
 	def __enqueue_results(self,r):
+		"""
+		queues back the results so it can be retrieved on bot thread
+		"""
 		if r == None:
 			return
 		#return results to results queue
@@ -288,6 +298,9 @@ class Amysql(threading.Thread):
 		#self.logger.log(self.level,"release lock released")
 
 	def run(self):
+		"""
+		worker thread function
+		"""
 		m = self.__connect_to_db()
 		self.__enqueue_results(m)  
 		while self.do_it:
@@ -307,11 +320,21 @@ class Amysql(threading.Thread):
 			self.conn.close()
 		
 	def queryEscape(self,string):
+		"""
+		any string that is gathered from the user or an ennviroment that isnt trusted
+		must be escaped before it is put into a query
+		this is to prevent sql injection. 
+		if you use the query,querytuple it should auto escape any string for you
+		
+		"""
 		if self.conn != None:
 			return MySQLdb.escape_string(string)
 		else:
 			return None
 	def requestStop(self):
+		"""
+		request workerthread die
+		"""
 		self.do_it = 0# wont iterate again
 		m = AMessage()
 		m.id = AMessage.TERMINATE
@@ -319,11 +342,18 @@ class Amysql(threading.Thread):
 		self.__enqueue_query(m)
 		
 	def cleanUp(self):
+		"""
+		this will hang til worker thread ends you should do this in cleanup
+		"""
 		self.requestStop()
 		self.join()
 		
 		
 	def getResults(self):
+		"""
+		grab results if any from the result queue
+		do this in timer/tick
+		"""
 		result = None
 		#self.logger.log(self.level,"mainthread:aquiring Result lock")
 		self.__results_lock.acquire()

@@ -25,11 +25,35 @@ class Bot(BotInterface):
 		self.timer_man.set(.01, 1)
 		self.timer_man.set(300, 2)
 		self.chat = bot.addChat("st4ff")
-		#formatter = logging.Formatter('%(name)s:%(message)s')
-		#chathandler = loggingChatHandler(logging.DEBUG,bot,1)
-		#chathandler.setFormatter(formatter)
-		#self.logger.addHandler(chathandler)
 		
+		formatter = logging.Formatter('%(message)s')
+		handler = loggingRemoteHandler(logging.DEBUG,bot,"Ratio")
+		handler.setFormatter(formatter)
+		self.logger.addHandler(handler)
+	
+	def getMessageTuple(self,event):
+		"""
+			this data will be used later in pretty printer
+			when the result is to be printed back to ss
+		"""
+		if event.command_type == MESSAGE_TYPE_PRIVATE:
+			target = event.pname
+			mtype = event.command_type
+		elif event.command_type == MESSAGE_TYPE_REMOTE:
+			target = event.pname
+			mtype = MESSAGE_TYPE_PRIVATE
+		elif event.command_type == MESSAGE_TYPE_FREQ:
+			target = event.player.freq
+			mtype = event.command_type
+		elif event.command_type == MESSAGE_TYPE_CHAT:
+			target = event.chat_no
+			mtype = event.command_type
+		else:
+			target = None
+			mtype = event.command_type
+		
+		return (mtype,target)
+	
 	def HandleEvents(self,ssbot,event):
 		
 		if event.type == EVENT_COMMAND:
@@ -39,18 +63,11 @@ class Bot(BotInterface):
 					limit = " limit 100"
 				else:
 					limit = ""
-						
-				if event.command_type in [MESSAGE_TYPE_PRIVATE,MESSAGE_TYPE_REMOTE]:
-					target = event.pname
-				elif event.command_type == MESSAGE_TYPE_FREQ:
-					target = event.player.freq
-				elif event.command_type == MESSAGE_TYPE_CHAT:
-					target = event.chat_no
-				else:
-					target = None
-
+				
+				mt = self.getMessageTuple(event)
+				
 				db = self._db
-				db.query(event.arguments_after[0] + limit , None, (event.command_type,target)) 
+				db.query(event.arguments_after[0] + limit , None, mt) 
 
 		elif event.type == EVENT_TICK:
 			timer_expired = self.timer_man.getExpired() # a timer expired
@@ -72,7 +89,7 @@ class Bot(BotInterface):
 	def HandleResults(self,ssbot,event,r):
 		if r.getType() == AElement.TYPE_MESSAGE: #message like connection error or connected
 			self.logger.info(r.message)
-		else:
+		else: 
 			r.GenericResultPrettyPrinter(ssbot,r.query.data[0],r.query.data[1])
 		
 	def Cleanup(self):

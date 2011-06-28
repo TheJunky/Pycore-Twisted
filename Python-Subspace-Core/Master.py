@@ -1,5 +1,5 @@
 '''
-@author: The Junky
+@author: The Junky <thejunky@gmail.com>
 '''
 
 import logging
@@ -11,62 +11,6 @@ from BotConfig import GlobalConfiguration
 import BotInstance
 import time
 import copy
-
-import threading
-from collections import deque
-
-class MasterQue():
-	def __init__(self):
-		self.__queue = deque()
-		self.__lock = threading.Lock()
-	def queue(self,event):
-		self.__lock.acquire()
-		self.__queue.append(event)
-		self.__lock.release()
-	def dequeue(self):
-		q = None
-		self.__lock.acquire()
-		if len(self.__queue) > 0:
-			q = self.__queue.pop()
-		self.__lock.release()
-		return q
-	def size(self):
-		return len(self.__queue)	
-
-class ShutDownException(Exception):
-	def __init__(self, value):
-		self.parameter = value
-	def __str__(self):
-		return repr(self.parameter)
-#the logging module allows u to add handlers for log messages
-#for example maybe you want certain log entries to be added
-#to an offsite server using httppost
-#this is simple handler that i made to copy messages to a list
-#so it can be spewed to ss without reading the logfile
-#you are required to overide __init__ and emit for it to work	
-class ListHandler(logging.Handler):
-	def __init__(self,level=NOTSET,max_recs=100):
-		logging.Handler.__init__(self,level)
-		self.list = []
-		self.max_recs = max_recs
-		self.max_slice = -1 * max_recs
-	def emit(self,record):
-		self.list.append(self.format(record))
-	def LoadFromFile(self,filename):
-		self.list = open(filename,'r').readlines()[self.max_slice:]
-
-	def RemoveOld(self):
-		if len(self.list) > self.max_recs:
-			self.list = self.list[self.max_slice:]
-	def GetEntries(self):
-		return self.list[self.max_slice:]
-	def Clear(self):
-		self.list = []
-				
-class NullHandler(logging.Handler):
-	def emit(self, record):
-		pass
-
 
 class Bot(BotInterface):
 	def __init__(self,ssbot,md,config,MQueue):
@@ -405,9 +349,11 @@ if __name__ == '__main__':
 		import cProfile
 		filename = time.strftime("bot-%a-%d-%b-%Y-%H-%M-%S.profile", time.gmtime())
 		cProfile.run('MasterMain()',filename)
-		#import pstats
-		#p = pstats.Stats(filename)
-		#p.strip_dirs().sort_stats(-1).print_stats()
+		import pstats
+		p = pstats.Stats(filename)
+		p.sort_stats('cumulative')
+		p.print_stats(.1)
+		pass
 	else:
 		MasterMain()
 

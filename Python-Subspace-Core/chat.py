@@ -27,13 +27,15 @@ class CHAT():
 	WHITE = 15
 	RAINBOW = 16
 	
-	def __init__(self):
+	def __init__(self,logger):
 		self.text = ""
 		#Store current attribute settings
 		self.old_setting = WConio.gettextinfo()[4] & 0x00FF
 		WConio.highvideo()
 		WConio.clrscr()
 		self.info = WConio.gettextinfo()
+		self.lg=logger
+		self.target=None
 	def spew(self,text,color):
 		if color == CHAT.RAINBOW:
 			c = 0
@@ -44,8 +46,12 @@ class CHAT():
 		else:		
 			WConio.textattr(color)
 			WConio.cputs(text)
+		t= text.find("\r\n")
+		if t:
+			text=text[0:t]
+		self.lg.info(text)
 	def ProcessInput(self,ssbot):
-		if WConio.kbhit():
+		while WConio.kbhit():
 			c= WConio.getch()
 			if c[0] == 8 and len(self.text) > 0:
 				self.text = self.text[:-1]
@@ -72,20 +78,28 @@ class CHAT():
 							
 						else:
 							self.text = ""
-						
-						pass
+					elif text[0] == "/" and self.text[1] != "/":#priv/remote
+						if self.target:
+							text = text[2:] 
+							ssbot.sendPrivateMessage(self.target,text[t+1:])
+							self.spew("RMT->:"+self.target +":"+text[t+1:]+"\r\n", CHAT.GREEN)
+						else:
+							self.spew("Target:NotSet\r\n", CHAT.WHITE)
 					elif text[0] == "'" or self.text[0:2] == "//":#team
+						text = text[1:] if text[0] =="'" else text[2:] 
 						ssbot.sendTeamMessage(text)
 						self.spew(ssbot.name+">"+text+"\r\n", CHAT.YELLOW)
-						pass
 					elif text[0] == '?': #command
 						if text.startswith("?quit"):
 							self.spew("BOT:?quit -Quitting\r\n", CHAT.MAGENTA)
 							ssbot.disconnectFromServer()
-						if text.startswith("?go"):
+						elif text.startswith("?target"):
+							self.target = text[8:].strip()
+							self.spew("BOT:priv/remote target set to: "+self.target+"\r\n", CHAT.MAGENTA)
+						elif text.startswith("?go"):
 							ssbot.sendChangeArena(text[3:].strip())
 							self.spew("BOT:changing arena to "+text[3:]+"\r\n", CHAT.MAGENTA)
-						if text.startswith("?team"):
+						elif text.startswith("?team"):
 							c= 0
 							self.spew("----TEAM---\r\n",CHAT.MAGENTA)
 							for p in ssbot.players_here:
@@ -98,7 +112,7 @@ class CHAT():
 									else:
 										self.spew(", ",CHAT.MAGENTA)
 							self.spew("\r\n",CHAT.MAGENTA)			
-						if text.startswith("?inarena"):
+						elif text.startswith("?inarena"):
 							c= 0
 							self.spew("----In Arena---\r\n",CHAT.MAGENTA)
 							for p in ssbot.players_here:
@@ -109,10 +123,10 @@ class CHAT():
 								else:
 									self.spew(", ",CHAT.MAGENTA)
 							self.spew("\r\n",CHAT.MAGENTA)								
-						if text.startswith("?chat"):
+
+						else:
 							ssbot.sendPublicMessage(text)
-						if text.startswith("?arena"):
-							ssbot.sendPublicMessage(text)		
+
 					else:
 						ssbot.sendPublicMessage(text)
 						self.spew(ssbot.name+">"+text+"\r\n", CHAT.GRAY)
@@ -138,10 +152,10 @@ class CHAT():
 
 class Bot(BotInterface):
 	def __init__(self,ssbot,md):
-		#BotInterface.__init__(self,ssbot,md)
+		BotInterface.__init__(self,ssbot,md)
 		#register Your Module
 		ssbot.registerModuleInfo(__name__,"ConIO Chat Client","the junky","chat client",".01")
-		self.c = CHAT()
+		self.c = CHAT(self.logger)
 		ssbot.addChat(botchats)
 		
 		
@@ -173,11 +187,11 @@ class Bot(BotInterface):
 			c= 0
 			self.c.spew("-------------ArenaList---------\r\n",CHAT.RAINBOW)
 			for a in event.arena_list:
-				self.c.spew(a[0]+":  "+str(a[1]),CHAT.WHITE)
-				if a[2] == 0:
-					self.c.spew("\r\n",CHAT.WHITE)
-				else:
-					self.c.spew("  <--YOU ARE HERE\r\n",CHAT.WHITE)	
+				self.c.spew(a[0]+":  "+str(a[1])+ ("\r\n" if a[2] == 0 else "  <--YOU ARE HERE\r\n"),CHAT.WHITE)
+##				if a[2] == 0:
+##					self.c.spew("\r\n",CHAT.WHITE)
+##				else:
+##					self.c.spew("  <--YOU ARE HERE\r\n",CHAT.WHITE)	
 					
 			
 	def Cleanup(self):
@@ -196,25 +210,25 @@ if __name__ == '__main__': #bot runs in this if not run by master u can ignore t
 
 	try:
 
-		logger = logging.getLogger("CHAT")
+		logger = logging.getLogger('')
 		logger.setLevel(logging.DEBUG)	
 		
 		
 		# set a format
-		formatter = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s:%(message)s')
+		formatter = logging.Formatter('[%(asctime)s]:%(message)s')
 		
 		
 		# define a Handler which writes INFO messages or higher to the sys.stderr
-		console = logging.StreamHandler()
-		console.setLevel(logging.DEBUG)
+		#console = logging.StreamHandler()
+		#console.setLevel(logging.DEBUG)
 		# tell the handler to use this format
-		console.setFormatter(formatter)
+		#console.setFormatter(formatter)
 		# add the handler to the mainloop logger
-		logger.addHandler(console)
+		#logger.addHandler(console)
 	
 		
-		filehandler  = logging.FileHandler(os.getcwd()+ R"/"+  __name__  +".log",mode='a')
-		filehandler.setLevel(logging.ERROR)
+		filehandler  = logging.FileHandler(os.getcwd()+ R"/chatbot.log",mode='a')
+		filehandler.setLevel(logging.INFO)
 		filehandler.setFormatter(formatter)
 		logger.addHandler(filehandler)
 		
@@ -225,19 +239,21 @@ if __name__ == '__main__': #bot runs in this if not run by master u can ignore t
 		#get the module object for the current file...	
 		module = sys.modules[globals()['__name__']]
 		#loads atleast the masterbot
-		md = ModuleData("TesttBot",module,"None","test.ini",logging.getLogger(__name__))
+		md = ModuleData("TesttBot",module,"None","test.ini","wtf",logging.getLogger(__name__))
 		bot = Bot(ssbot,md)
 		BotList.append(bot)
 	
 		
-		ssbot.connectToServer('66.235.184.102', 7900, botname, botpassword, '#python')		   
+		ssbot.connectToServer('66.235.184.102', 7900, botname, botpassword, '#master')		   
 		
 		while ssbot.isConnected():
 				event = ssbot.waitForEvent()
 				for b in BotList:
 					b.HandleEvents(ssbot,event)
-	except (KeyboardInterrupt, SystemExit):
-		pass
+	#except (KeyboardInterrupt, SystemExit):
+	#	pass
+	except:
+		LogException(logger)
 	finally:
 		for b in BotList:
 			b.Cleanup()

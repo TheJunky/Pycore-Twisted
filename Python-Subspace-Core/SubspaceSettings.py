@@ -3,7 +3,7 @@ Created on Feb 15, 2011
 
 Adapted from mervbot/asss to pybot
 
-@author: The Junky 
+@author: The Junky <thejunky@gmail.com>
 
 '''
 import struct

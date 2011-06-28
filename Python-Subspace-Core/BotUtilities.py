@@ -11,6 +11,9 @@ import time
 import os
 import math
 import types
+import threading
+from collections import deque
+
 from SubspaceBot import SubspaceBot
 from SubspaceBot import MESSAGE_TYPE_ARENA,MESSAGE_TYPE_SYSTEM,MESSAGE_TYPE_PUBLIC_MACRO
 from SubspaceBot import MESSAGE_TYPE_PUBLIC,MESSAGE_TYPE_TEAM,MESSAGE_TYPE_FREQ,MESSAGE_TYPE_PRIVATE
@@ -182,6 +185,12 @@ def Pixels_To_SS_Area(x , y):
 def Tiles_To_SS_Area(x , y):
 	return Pixels_To_SS_Area(x<<4 , y<<4)
 
+class SSmessengerException(Exception):
+	def __init__(self, value):
+		self.parameter = value
+	def __str__(self):
+		return repr(self.parameter)	
+	
 class SSmessenger():
 	"""
 	This class is used  if you want to use differing methods to print/message 
@@ -194,8 +203,8 @@ class SSmessenger():
 		MESSAGE_TYPE_CHAT (target must be a chat channel)
 		
 		for arena or zone or *bot messages use MESSAGE_TYPE_PUBLIC with thre appropriate prefix
-		
-		
+
+		throws SSmessengerException on error		
 	"""
 	def __init__(self,ssbot,mtype,target=None,prefix=""):
 		self.ssbot = ssbot
@@ -204,35 +213,43 @@ class SSmessenger():
 		self.prefix = prefix
 		if mtype == MESSAGE_TYPE_PUBLIC:
 			self.func = self.__pub 	
-		elif mtype in [MESSAGE_TYPE_PRIVATE,MESSAGE_TYPE_REMOTE]:
+		elif mtype == MESSAGE_TYPE_PRIVATE:
 			if type(target) == types.StringType:
 				self.player = ssbot.findPlayerByName(target)
 				if not self.player:
-					raise "Player NotFound"
+					raise SSmessengerException("Player NotFound")
 			elif isinstance(Player,target):
 				self.player = target
 			else:
-				raise "mtype private/remote but target is'nt a player"
-			self.func=self.__priv	
+				raise SSmessengerException("MessageType private/remote but target is'nt a string/player")
+			self.func=self.__priv
+		elif mtype == MESSAGE_TYPE_REMOTE:
+			if type(target) == types.StringType:
+				self.func=self.__rmt
+				self.playername=target
+			else:
+				raise SSmessengerException("MessageType remote but target is'nt a string")	
 		elif mtype == MESSAGE_TYPE_TEAM:
 			self.func = self.__team
 		elif mtype == MESSAGE_TYPE_FREQ:
 			if type(target) != types.IntType:
-				raise "mtype freq but target is'nt a freq"
+				raise SSmessengerException("MessageType freq but target is'nt a freq")
 			self.func = self.__freq
 			self.freq = target
 		elif mtype == MESSAGE_TYPE_CHAT:
 			if type(target) != types.IntType:
-				raise "mtype chat but target is'nt a channel"
+				raise SSmessengerException("MessageType chat but target is'nt a channel")
 			self.func = self.__chat
 			self.chat = ";"+str(target)+";"
 		else:
-			raise "mtype not supported"
+			raise SSmessengerException("MessageType not supported")
 		
 	def __pub(self,message,sound=SOUND_NONE):
 		self.ssbot.sendPublicMessage(message,sound)
 	def __priv(self,message,sound=SOUND_NONE):
 		self.ssbot.sendPrivateMessage(self.player,message,sound)
+	def __rmt(self,message,sound=SOUND_NONE):
+		self.ssbot.sendRemoteMessage(self.playername,message,sound)
 	def __team(self,message,sound=SOUND_NONE):
 		self.ssbot.sendTeamMessage(message,sound)
 	def __freq(self,message,sound=SOUND_NONE):
@@ -249,9 +266,10 @@ class loggingChatHandler(logging.Handler):
 	"""
 	def __init__(self,level,ssbot,chat_no):
 		logging.Handler.__init__(self,level)
-		self.ss = SSmessenger(ssbot,MESSAGE_TYPE_CHAT,chat_no)
+		self.ssbot = ssbot
+		self.chat = ";"+str(chat_no)+";"
 	def emit(self,record):
-		self.ss.sendMessage(self.format(record))
+		self.ssbot.sendChatMessage(self.chat+self.format(record))
 		
 class loggingTeamHandler(logging.Handler):
 	"""
@@ -259,9 +277,9 @@ class loggingTeamHandler(logging.Handler):
 	"""
 	def __init__(self,level,ssbot):
 		logging.Handler.__init__(self,level)
-		self.ss = SSmessenger(ssbot,MESSAGE_TYPE_TEAM,None)
+		self.ssbot = ssbot
 	def emit(self,record):
-		self.ss.sendMessage(self.format(record))
+		self.ssbot.sendTeamMessage(self.format(record))
 		
 class loggingPublicHandler(logging.Handler):
 	"""
@@ -269,7 +287,71 @@ class loggingPublicHandler(logging.Handler):
 	"""
 	def __init__(self,level,ssbot,prefix):
 		logging.Handler.__init__(self,level)
-		self.ss = SSmessenger(ssbot,MESSAGE_TYPE_PUBLIC,prefix)
+		self.ssbot = ssbot
 	def emit(self,record):
-		self.ss.sendMessage(self.format(record))			
+		self.ssbot.sendPublicMessage(self.format(record))
 
+class loggingRemoteHandler(logging.Handler):
+	"""
+	Logging module handler to spew entries to pub
+	"""
+	def __init__(self,level,ssbot,name):
+		logging.Handler.__init__(self,level)
+		self.ssbot = ssbot
+		self.name = name
+	def emit(self,record):
+		self.ssbot.sendRemoteMessage(self.name,self.format(record))			
+
+#the logging module allows u to add handlers for log messages
+#for example maybe you want certain log entries to be added
+#to an offsite server using httppost
+#this is simple handler that i made to copy messages to a list
+#so it can be spewed to ss without reading the logfile
+#you are required to overide __init__ and emit for it to work	
+class ListHandler(logging.Handler):
+	def __init__(self,level=NOTSET,max_recs=100):
+		logging.Handler.__init__(self,level)
+		self.list = []
+		self.max_recs = max_recs
+		self.max_slice = -1 * max_recs
+	def emit(self,record):
+		self.list.append(self.format(record))
+	def LoadFromFile(self,filename):
+		self.list = open(filename,'r').readlines()[self.max_slice:]
+
+	def RemoveOld(self):
+		if len(self.list) > self.max_recs:
+			self.list = self.list[self.max_slice:]
+	def GetEntries(self):
+		return self.list[self.max_slice:]
+	def Clear(self):
+		self.list = []
+				
+class NullHandler(logging.Handler):
+	def emit(self, record):
+		pass
+	
+	
+class MasterQue():
+	def __init__(self):
+		self.__queue = deque()
+		self.__lock = threading.Lock()
+	def queue(self,event):
+		self.__lock.acquire()
+		self.__queue.append(event)
+		self.__lock.release()
+	def dequeue(self):
+		q = None
+		self.__lock.acquire()
+		if len(self.__queue) > 0:
+			q = self.__queue.pop()
+		self.__lock.release()
+		return q
+	def size(self):
+		return len(self.__queue)	
+
+class ShutDownException(Exception):
+	def __init__(self, value):
+		self.parameter = value
+	def __str__(self):
+		return repr(self.parameter)	

@@ -667,7 +667,9 @@ MAX_FLAGS = 256
 class Flag():
 	def __init__(self,id,pid=0xFFFF,freq=0xFFFF,x=0xFFFF,y=0xFFFF):
 		self.id=id
-		self.pid=pid
+		self.carried_by_pid=pid
+		self.dropped_by_pid=0xFFFF
+		self.tick = 0
 		self.freq=freq
 		self.x=x
 		self.y=y
@@ -736,6 +738,7 @@ class Oplist:
 			ssbot.sendReply(event,"No Ops")
 		pass
 	def Read(self):
+		self.__ops_dict = {}
 		for line in open(self.__filename,'r').readlines():
 			line = line.strip().lower()
 			if line.strip() != "":
@@ -864,7 +867,8 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 
 			EVENT_LOGIN : self.__eventLoginPostprocessor,
 			EVENT_FLAG_PICKUP : self.__eventFlagPickupPostprocessor,
-			EVENT_FLAG_DROP : self.__eventFlagDropPostprocessor
+			EVENT_FLAG_DROP : self.__eventFlagDropPostprocessor,
+			EVENT_KILL : self.__eventKillPostprocessor
 		}
 		
 		# setup the appropriate handlers
@@ -1266,7 +1270,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		# deal with basic message types and are easier to use. lets make this private
 		if isinstance(message, list):
 			for m in message:
-				self.queuePacket(struct.pack("<BBBH", 0x06, message_type, sound, target_pid) + message[:247] + '\x00', reliable=True)
+				self.queuePacket(struct.pack("<BBBH", 0x06, message_type, sound, target_pid) + m[:247] + '\x00', reliable=True)
 		else:
 			self.queuePacket(struct.pack("<BBBH", 0x06, message_type, sound, target_pid) + message[:247] + '\x00', reliable=True)
 		
@@ -1453,17 +1457,21 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		type, flag_id, pid = struct.unpack_from("<BHH", packet)
 		player = self.findPlayerByPid(pid)
 		if player:
+			flag = self.flag_list[flag_id]
 			event = GameEvent(EVENT_FLAG_PICKUP)
 			event.player = player
 			event.flag_id = flag_id
-			event.flag = self.flag_list[flag_id]
+			event.flag = flag
+			event.transferred_from = flag.carried_by_pid
+			self.sendPublicMessage("fp/ft %d:%x->%x"%(flag_id,flag.carried_by_pid,pid))
 			self.__addPendingEvent(event)
+
 			
 	def __eventFlagPickupPostprocessor(self,event):
 		event.flag.x = COORD_NONE
 		event.flag.y = COORD_NONE
 		event.player.flag_count+=1
-		event.flag.pid = event.player.pid
+		event.flag.carried_by_pid = event.player.pid
 		event.flag.freq = event.player.freq		
 		
 	def __handleFlagDropPacket(self, packet):
@@ -1483,7 +1491,9 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		freq = player.freq
 		for f in self.flag_list: #set flags he had to dropped in flaglist
 			if f.pid == pid:
-				f.pid = PID_NONE
+				f.carried_by_pid = PID_NONE
+				f.dropped_by_pid = pid
+				f.tick = GetTickCountHs()
 				f.freq = freq
 		
 	def __handleScoreResetPacket(self, packet):
@@ -1527,7 +1537,6 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	
 	def __handleArenaSettingsPacket(self, packet):
 		self.settings = arenaSettings(packet);
-		print("settings recieved")
 		
 				
 	def __handlePeriodicRewardPacket(self, packet):
@@ -1622,6 +1631,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	
 	def __handleLoginResponsePacket(self, packet):
 		login_response, = struct.unpack_from("<B", packet, 1)
+		#print self.__login_response[login_response]
 		if login_response == 0x01:
 			self.__sendRegistrationForm()#doesnt work
 			self.__log(INFO, "Sending Registration Form")
@@ -2334,6 +2344,13 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			killed.flag_count = 0
 			self.__addPendingEvent(event)
 	
+	def __eventKillPostprocessor(self,event):
+		if event.flags_transfered > 0:
+			for f in self.flags:
+				if event.killed.pid == f.carried_by_pid:
+					f.carried_by_pid = event.killer.pid
+					f.tick = GetTickCountHs()
+				
 	def __handleArenaListPacket(self, packet):
 		"""'arenaname\x00\xFF\xFF'"""
 		offset = 1 # skip the type byte
@@ -2405,10 +2422,10 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	def __sendFile(self,filename,remotefilename):#0x16
 		if (os.path.isfile(os.getcwd()+ "//" + filename)):
 			packet = struct.pack("<B16s",0x16,remotefilename[0:14]+chr(0))
-			packet+= zlib.compress(open(os.getcwd()+ "//" + filename,"rb").read())
-			#packet+= open(os.getcwd()+ "//" + filename,"rb").read()
+			#packet+= zlib.compress(open(os.getcwd()+ "//" + filename,"rb").read())
+			packet+= open(os.getcwd()+ "//" + filename,"rb").read()
 			self.__log(DEBUG,"sending file:%s"%(filename,))
-			self.queueHugeChunkPacket(packet)
+			self.queuePacket(packet)
 		else:
 			self.__log(ERROR,"sendfile %s localfile doesnt exist"%(filename,))
 #		self.__log(INFO,"*putfile disabled(doesnt work)")
@@ -2456,16 +2473,17 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		assert(len(d) == size)
 		return d
 	def __sendRegistrationForm(self):#copied from twcore doesnt work, probably queueHugeChunkPacket broken?
-		packet  = struct.pack("<B32s64s32s24sBBBBBIHH",
+		packet  = struct.pack("<B32s64s32s24sBBBBBHHI40s",
 							0x17,
 							self.__makePaddedString("thejunky",32),
 							self.__makePaddedString("thejunky@gmail.com",64),
 							self.__makePaddedString("WTF",32),
 							self.__makePaddedString("WTF",24),
-							1,99,1,1,1,686,0xC000,2036) 
-		packet += (self.__makePaddedString("PYCore",40) * 15)
+							77,20,1,1,1,586,0xC000,2036,
+							self.__makePaddedString(self.name,40))
+		packet += (self.__makePaddedString("PYCore",40) * 14)
 							
-		self.queueHugeChunkPacket(packet)
+		self.queuePacket(packet,True,PRIORITY_HIGH)
 	
 	def resetState(self):
 		if self.__connected:

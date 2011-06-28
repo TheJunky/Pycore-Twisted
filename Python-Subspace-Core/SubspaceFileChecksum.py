@@ -4,14 +4,13 @@ import array
 G4_MODIFIER =  0x77073096					# I am pretty sure these "constants"
 G16_MODIFIER = 0x076dc419					# are all constants.  That is to
 G64_MODIFIER = 0x1db71064					# say, maybe they are dependant on
-G256_MODIFIER =0x76dc4190					# the key provided to the algorithm.
+G256_MODIFIER =0x76dc4190					# the key provided to the algorithm. 
 class FileChecksum():
 	def __init__(self):
 		#self.d= []
 		#for i in range(256):
 		#	self.d.append(int(0))
 		self.d = array.array("L", [0] * 256)
-		self.generateChecksumArray()
 		
 	def getFileChecksum(self,filename):
 		data = open(filename,"rb").read()
@@ -26,8 +25,7 @@ class FileChecksum():
 
 	def generate4(self,offset, key):
 		self.d[offset] = key
-		key ^ G4_MODIFIER
-		self.d[offset+1] = key
+		self.d[offset+1] = key ^ G4_MODIFIER
 		key ^= (G4_MODIFIER << 1)
 		self.d[offset+2] = key
 		self.d[offset+3] = key ^ G4_MODIFIER
@@ -43,8 +41,7 @@ class FileChecksum():
 		key ^= (G64_MODIFIER << 1)
 		self.generate16(offset + 32, key)
 		self.generate16(offset + 48, key ^ G64_MODIFIER)
-	def generateChecksumArray(self):
-		key = 0
+	def generateChecksumArray(self,key):
 		self.generate64(0, key)
 		self.generate64(64, key ^ G256_MODIFIER)
 		key ^= (G256_MODIFIER << 1)
