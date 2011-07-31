@@ -2,8 +2,12 @@
 @author: The Junky
 '''
 #masterbot for cycad's python core written by The Junky<thejunky@gmail.com>
-import json
+import sys
 
+if sys.platform.startswith('java'):
+	from com.xhaus.jyson import JysonCodec as json	
+else:
+	import json
 
 class BotConfiguration:
 	def __init__(self,confdict,password=None):

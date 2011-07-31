@@ -827,6 +827,8 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		self.__next_timer_id = 0
 		self.__last_timer_expire_tick = GetTickCountHs()
 		
+		self.__max_cmd_len = 10 #used for formatting will store the max(len("!name/!alias [args]"))
+		
 		self.__command_help_id = self.registerCommand('!help',None,0,COMMAND_LIST_PP,"Core","[<cat>|<!cmd>|*]","display available commands")
 		self.__command_about_id = self.registerCommand('!about',None,0,COMMAND_LIST_PP,"Core","","display information about current bot")
 		
@@ -837,9 +839,9 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			
 		if(isMaster):
 			self.__isMaster = True;
-			self.__command_die_id = self.registerCommand('!stopmaster',None,7,COMMAND_LIST_PR,"Core","","recycle the master")
-			self.__command_addop_id = self.registerCommand('!Addop',"!ao",4,COMMAND_LIST_ALL,"Core","","add a player to the oplist")
-			self.__command_delop_id = self.registerCommand('!Delop',"!do",4,COMMAND_LIST_ALL,"Core","","delete a player from the oplist")
+			self.__command_die_id = self.registerCommand('!stopmaster',None,7,COMMAND_LIST_PR,"Core","","stop the master")
+			self.__command_addop_id = self.registerCommand('!Addop',"!ao",4,COMMAND_LIST_ALL,"Core","[lvl:name]","add a player to the oplist")
+			self.__command_delop_id = self.registerCommand('!Delop',"!do",4,COMMAND_LIST_ALL,"Core","[name]","delete a player from the oplist")
 			self.__command_listops_id = self.registerCommand('!Listops',"!lo",4,COMMAND_LIST_PP,"Core","","list all the ops <= to your lvl")
 			self.__command_reloadops_id = self.registerCommand('!Reloadops',"!ro",4,COMMAND_LIST_ALL,"Core","","reread oplist from file")
 		else:
@@ -1017,6 +1019,8 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			nc = Command(id,name,alias,access_lvl,msg_types_list,category,args,short_help,long_help)
 			self.__cmd_dict[k] = nc
 			
+			self.__max_cmd_len = max(len(nc.name)+len(nc.alias)+len(nc.args)+4,self.__max_cmd_len) 
+			
 			if alias != None and alias != "":
 				ka = alias.lower()
 				if ka in self.__alias_dict:
@@ -1028,6 +1032,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 				self.__category_dict[kc].append(nc)
 			else:
 				self.__category_dict[kc] = [nc]
+			
 		return id
 	
 	def __getCmd(self,name):
@@ -1463,7 +1468,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			event.flag_id = flag_id
 			event.flag = flag
 			event.transferred_from = flag.carried_by_pid
-			self.sendPublicMessage("fp/ft %d:%x->%x"%(flag_id,flag.carried_by_pid,pid))
+			#self.sendPublicMessage("fp/ft %d:%x->%x"%(flag_id,flag.carried_by_pid,pid))
 			self.__addPendingEvent(event)
 
 			
@@ -1786,6 +1791,8 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 
 	def __handleCommandHelp(self, event):
 		if len(event.arguments_after) > 0:
+			fmt = '%'+'-'+str(self.__max_cmd_len)+"s   %s" # make format string based on max cmd size
+
 			if event.arguments_after[0][0] == '*':
 				self.sendReply(event, "All commands:")
 				for k, v in self.__cmd_dict.iteritems():
@@ -1793,7 +1800,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 						alias = "/" + v.alias
 					else:
 						alias = ""
-					self.sendReply(event, '%-20s   %s' % (v.name+alias+" "+v.args,v.help_short))
+					self.sendReply(event, fmt % (v.name+alias+" "+v.args,v.help_short))
 			elif event.arguments_after[0][0] == '!':
 				command = self.__getCmd(event.arguments_after[0])
 				if command:
@@ -1817,7 +1824,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 							alias = "/" + v.alias
 						else:
 							alias = ""
-						self.sendReply(event, '%-20s   %s' % (v.name+alias+" "+v.args,v.help_short))
+						self.sendReply(event, fmt % (v.name+alias+" "+v.args,v.help_short))
 				else:	
 					self.sendReply(event, "no such category exists (%s):"%(name))
 		else:

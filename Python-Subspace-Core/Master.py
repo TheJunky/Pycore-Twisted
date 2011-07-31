@@ -19,13 +19,13 @@ class Bot(BotInterface):
 		self.config = config
 		self._cmd_handlers = { 
 		#Cmd_ID,								  cmd_handler_func
-		ssbot.registerCommand('!startbot',"!sb",2,COMMAND_LIST_ALL,"Core","" ,'!startbot type arena') : self.HCStartBot,
-		ssbot.registerCommand('!killbot',"!kb",2,COMMAND_LIST_ALL,"Core","", '!killbot name') : self.HCStopBot,
-		ssbot.registerCommand('!listbots',"!lb",2,COMMAND_LIST_PP,"Core","" ,'!listbots') : self.HCListBots,
-		ssbot.registerCommand('!listbottypes',"!lt",2,COMMAND_LIST_PP,"Core","" ,'!listtypes') : self.HCListBotTypes,
-		ssbot.registerCommand('!reloadconf',"!rc",3,COMMAND_LIST_ALL,"Core","" ,'reload config') : self.HCLoadConfig,
-		ssbot.registerCommand('!unloadmodule',"!um",7,COMMAND_LIST_ALL,"Core","" ,'unload a specific module from systems.module') : self.HCUnloadModule,
-		ssbot.registerCommand('!log',None,2,COMMAND_LIST_PP,"Core","[-clear]" , 'default shows log, -clear to clear onscreen log') : self.HCLog}
+		ssbot.registerCommand('!startbot',"!sb",2,COMMAND_LIST_ALL,"Master","[type] [arena]" ,'!startbot type arena') : self.HCStartBot,
+		ssbot.registerCommand('!killbot',"!kb",2,COMMAND_LIST_ALL,"Master","[name]", 'Stop a specific bot') : self.HCStopBot,
+		ssbot.registerCommand('!listbots',"!lb",2,COMMAND_LIST_PP,"Master","" ,'lists all currently running bots') : self.HCListBots,
+		ssbot.registerCommand('!listbottypes',"!lt",2,COMMAND_LIST_PP,"Master","" ,'!lists all bot types currently defined in config file') : self.HCListBotTypes,
+		ssbot.registerCommand('!reloadconf',"!rc",3,COMMAND_LIST_ALL,"Master","" ,'reload json config file') : self.HCLoadConfig,
+		ssbot.registerCommand('!unloadmodule',"!um",7,COMMAND_LIST_ALL,"Master","[modulename]" ,'unload a specific module from systems.module') : self.HCUnloadModule,
+		ssbot.registerCommand('!log',None,2,COMMAND_LIST_PP,"Master","[-clear]" , 'default shows last 100 lines from the core logger') : self.HCLog}
 		self._last_instance_id = 0
 		self._instances = {}
 		#this will copy all log entries to a list, so i can use it for !log

@@ -6,10 +6,11 @@ import sys
 import struct 
 import random 
 import select 
-import time
 import traceback
 import SubspaceEncryption
-import ctypes
+#from win32api import GetTickCount
+import time
+import math
 from SubspaceFileChecksum import FileChecksum
 
 g_select = select.select
@@ -18,8 +19,8 @@ g_select = select.select
 def GetTickCountHs():
 	"""Tick count in hundreths of a second."""
 	# this is win32 only, so it isnt used here out of compatibility reasons
-	return (ctypes.windll.kernel32.GetTickCount() / 10) & 0xFFFFFFFF
-	
+	#return (GetTickCount() / 10) & 0xFFFFFFFF
+	return math.trunc(time.clock() * 100) & 0xFFFFFFFF
 	#return int(time.time() * 100) & 0xFFFFFFFF
 
 def TickDiff(now, base):
@@ -137,7 +138,7 @@ class CoreStack:
 		
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.__socket.connect((server, port))
-		self.__socket.setblocking(True)
+		self.__socket.setblocking(False) #changed for jython support doesnt seem to affect python
 		
 		STATE_NONE = 0
 		STATE_CHALLENGE_RECEIVED = 1
