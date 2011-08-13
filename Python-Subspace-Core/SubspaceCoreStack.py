@@ -5,23 +5,17 @@ import socket
 import sys
 import struct 
 import random 
-import select 
 import traceback
 import SubspaceEncryption
-#from win32api import GetTickCount
 import time
 import math
 from SubspaceFileChecksum import FileChecksum
 
-g_select = select.select
-
 
 def GetTickCountHs():
 	"""Tick count in hundreths of a second."""
-	# this is win32 only, so it isnt used here out of compatibility reasons
-	#return (GetTickCount() / 10) & 0xFFFFFFFF
 	return math.trunc(time.clock() * 100) & 0xFFFFFFFF
-	#return int(time.time() * 100) & 0xFFFFFFFF
+
 
 def TickDiff(now, base):
 	"""Returns the difference between two 32-bit tick counts."""
@@ -138,7 +132,9 @@ class CoreStack:
 		
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.__socket.connect((server, port))
-		self.__socket.setblocking(False) #changed for jython support doesnt seem to affect python
+		self.__socket.setblocking(True) #changed for jython support doesnt seem to affect python
+		self.__socket.settimeout(.01)
+		self.__timeout_interval = 0.01
 		
 		STATE_NONE = 0
 		STATE_CHALLENGE_RECEIVED = 1
@@ -314,10 +310,6 @@ class CoreStack:
 		while 1:
 			if len(self.__packet_queues[PRIORITY_HIGH]) == 0 and len(self.__packet_queues[PRIORITY_NORMAL]) == 0:
 				break
-			
-			# check to make sure outbound socket is writable
-			rlist, wlist, xlist = g_select([], [self.__socket], [], 0)
-			if len(wlist) == 0: break
 		
 			packet = self.__generateNextOutboundPacket()
 			if packet:
@@ -426,18 +418,12 @@ class CoreStack:
 			
 			# nothing left to do, wait on an event
 			timeout = float(EVENT_TICK_INTERVAL - self.__event_tick_tick_accumulator) / 100
-			# if there are no packets to be sent, just wait for a read
-			# otherwise wait for a read or the outbound socket to be writable
-			if len(self.__packet_queues[PRIORITY_HIGH]) == 0 and len(self.__packet_queues[PRIORITY_NORMAL]) == 0:
-				g_select([self.__socket], [], [], timeout)
-			else:
-				g_select([self.__socket], [self.__socket], [], timeout)
-	
+
 	def __processIncomingPackets(self):
 		"""Process all incoming packets."""
 		# process incoming packets, if any exist
 		while True:
-			packet = self.__readRawPacket(0)
+			packet = self.__readRawPacket(.0001)
 			if packet is None: break
 			self.__processIncomingPacket(packet)
 			
@@ -504,11 +490,15 @@ class CoreStack:
 			
 	def __readRawPacket(self, timeout):
 		"""Read a raw packet on the network, optionally blocking on the socket."""
-		rlist, wlist, xlist = g_select([self.__socket], [], [], timeout)
-		if len(rlist) == 0:
-			return None
-		
-		packet = rlist[0].recv(MAX_PACKET)
+		try:
+			if self.__timeout_interval != timeout:
+				self.__timeout_interval = timeout
+				self.__socket.settimeout(self.__timeout_interval)
+			packet = self.__socket.recv(MAX_PACKET)
+		except socket.timeout as e:
+			#self.logger.info("timeout")
+			return
+			
 		self.__total_packets_received += 1
 		
 		# decrypt the packet
