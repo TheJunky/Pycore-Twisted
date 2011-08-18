@@ -125,7 +125,7 @@ EVENT_ARENA_LIST = 11
 """An arena list was received.  This is usually in response to sending a pub message
 containing '?arena'.
 
-arena_list is a list of (arena_name, num_players) tuples.
+arena_list is a list of (arena_name, num_players,here) tuples.
 
 bot.arena is updated during this event.
 
@@ -1496,7 +1496,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		pid = player.pid
 		freq = player.freq
 		for f in self.flag_list: #set flags he had to dropped in flaglist
-			if f.pid == pid:
+			if f.carried_by_pid == pid:
 				f.carried_by_pid = PID_NONE
 				f.dropped_by_pid = pid
 				f.tick = GetTickCountHs()

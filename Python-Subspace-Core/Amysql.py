@@ -93,12 +93,16 @@ class AResult(AElement):
 			self.error_msg = e.args[1]
 
 
-	def GenericResultPrettyPrinter(self,ssbot,mtype,target):
+	def GenericResultPrettyPrinter(self,ssbot,mtype,target,fail_only=False):
 		"""
 		this function will print any result nicely on screen with proper formatting 
 		"""
 		ss = BotUtilities.SSmessenger(ssbot,mtype,target)
-		if self.rows is None or len(self.rows) == 0:
+		if fail_only:
+			if self.error_msg:
+				ss.sendMessage("Error: " + str(self.query.text))
+				ss.sendMessage("Error: " + str(self.error_msg))
+		elif self.rows is None or len(self.rows) == 0:
 			if self.rows_affected:
 				ss.sendMessage("RowsAffected: " + str(self.rows_affected))
 			if self.last_row_id:
@@ -130,7 +134,8 @@ class AResult(AElement):
 					fm += " %" + str(col) +"s |" 		
 				ss.sendMessage(tb)
 				ss.sendMessage((fm%tuple(names)))
-				ss.sendMessage(tb)		
+				ss.sendMessage(tb)
+				
 				for row in self.rows: #output the rows
 					ss.sendMessage((fm%row))
 				ss.sendMessage(tb)

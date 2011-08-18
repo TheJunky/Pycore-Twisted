@@ -144,7 +144,6 @@ def botMain(Bot,debug=False,isMaster=False,arena="#master"):
 		
 		#get the module object for the current file...	
 		module = sys.modules[globals()['__name__']]
-		#loads atleast the masterbot
 		md = ModuleData("TesttBot",module,"None","test.ini","",logging.getLogger(__name__))
 		bot = Bot(ssbot,md)
 	
