@@ -2354,7 +2354,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	
 	def __eventKillPostprocessor(self,event):
 		if event.flags_transfered > 0:
-			for f in self.flags:
+			for f in self.flag_list:
 				if event.killed.pid == f.carried_by_pid:
 					f.carried_by_pid = event.killer.pid
 					f.tick = GetTickCountHs()
