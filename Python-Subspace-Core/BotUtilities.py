@@ -153,8 +153,9 @@ def botMain(Bot,debug=False,isMaster=False,arena="#master"):
 		while ssbot.isConnected():
 			event = ssbot.waitForEvent()
 			bot.HandleEvents(ssbot,event)
-	except:
+	except Exception as e:
 		LogException(logger)
+		raise 
 	finally:
 		bot.Cleanup()
 		logger.critical("Testbot shutting down")
