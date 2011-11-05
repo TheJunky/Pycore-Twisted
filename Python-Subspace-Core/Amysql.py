@@ -351,7 +351,7 @@ class Amysql(threading.Thread):
 		this will hang til worker thread ends you should do this in cleanup
 		"""
 		self.requestStop()
-		self.join()
+		self.join(5)
 		
 		
 	def getResults(self):

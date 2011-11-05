@@ -114,7 +114,7 @@ def LoadBot(ssbot,modulename,param,inifile,args,logger):
 		return bot
 
 
-def botMain(Bot,debug=False,isMaster=False,arena="#master"):
+def botMain(Bot,debug=False,isMaster=False,arena="#python"):
 	from Credentials import botowner, botname, botpassword
 	try:
 		logger = logging.getLogger( __name__ )

@@ -47,7 +47,15 @@ EVENT_MESSAGE = 4
 message is the text of the message.  message_type indicates what type of message
 was received, and is one of the MESSAGE_TYPE_Xxx constants.
 
-Sets: type, message, message_type"""
+Sets:
+		event.player = player
+		event.message = message
+		event.message_type = message_type
+		event.pname = message_name
+		event.chat_no = chatnum
+		event.alert_name = alert
+		event.alert_arena = arena
+"""
 
 EVENT_ENTER = 5
 """Indicates a player entered the arena.
@@ -71,7 +79,15 @@ EVENT_CHANGE = 7
 
 player is the player that changed freq.  old_freq is the player's old frequency.
 old_ship is the player's old ship. If {freq,ship} didn't change, old_{ship,freq}
-are equal."""
+are equal.
+			event.player
+			event.old_freq = player.freq
+			event.old_ship = player.ship
+			player.ship = new_ship
+			player.freq = new_freq
+
+
+"""
 
 EVENT_COMMAND = 8
 """A command was used.
@@ -91,12 +107,37 @@ This allows you to match players with spaces in their name such as:
 	!lag C H E E P
 by using arguments_after[0]
    
-Sets: type, player, command, arguments, arguments_after."""
+Sets: type, player, command, arguments, arguments_after.
+			event = GameEvent(EVENT_COMMAND)
+			event.player = event.player
+			event.command = command
+			event.arguments = event.arguments
+			event.arguments_after = event.arguments_after
+			event.pname = event.pname
+			event.plvl = event.plvl
+			event.chat_no = event.chat_no
+			event.alert_name = event.alert_name
+			event.alert_arena = event.alert_arena
+			event.command_type = event.command_type
+
+
+"""
 
 EVENT_POSITION_UPDATE = 9
 """A position update was received for player.
 
 Sets: type, player,fired_weapons,sd_updated
+updates:
+			player.rotation = rotation
+			player.x_pos = x_pos
+			player.y_pos = y_pos
+			player.x_vel = x_vel
+			player.y_vel = y_vel
+			player._setStatus(status)
+			player.bounty = bounty
+			player.ping = latency
+			player.last_pos_update_tick = GetTickCountHs()
+
 
 if sd_updated == true then 
 spectator data in the player class is updated
@@ -137,7 +178,7 @@ EVENT_TIMER = 12
 id is the ID of the timer, returned by bot.setTimer(), of the timer that expired.
 user_data is the same user_data passed to bot.setTimer() during the timer's creation.
 
-Timers are only granular to 1 second.
+Timers are only granular to .1 second.
 
 Sets: type, id, user_data"""
 
@@ -157,7 +198,7 @@ EVENT_FLAG_PICKUP = 14
 player is the player who picked up the flag.
 flag_id is the id for the flag that was picked up.
 
-Sets: type, player, flag_id"""
+Sets: type, player, flag_id,transferred_from"""
 
 EVENT_FLAG_DROP = 15
 """Someone dropped a flag.
@@ -173,7 +214,7 @@ turreter is the player who attached to another player.
 turreted is the player who was attached to.
 old_turreted is a player if the event is a detach else it is None
 
-Sets: type, turreter, turreted"""
+Sets: type, turreter, turreted,old_turreted"""
 
 EVENT_PERIODIC_REWARD = 17
 """Freqs are periodically given rewards for the amount of flags they own.
@@ -219,7 +260,19 @@ happens when a player picksup a green
 """
 EVENT_SCORE_UPDATE = 22
 """
-Sets type,player
+Sets type,
+			event.player
+			old values:
+			event.old_flag_points 
+			event.old_kill_points
+			event.old_wins 
+			event.old_losses 
+			new values:
+			player.wins
+			player.flag_points
+			player.kill_points
+			player.losses
+			all the new values will be
 player score will be updated at this time
 """
 EVENT_SCORE_RESET = 23
@@ -230,7 +283,7 @@ everyone in the arena has been reset to 0
 """
 EVENT_FLAG_UPDATE = 24
 """
-sets: type,flag_id,x,y
+sets: type,freq,flag_id,x,y
 this is sent periodicly, it will update the position of dropped flags
 in flag drop the position of the flag wont be known until the next 
 flag update
@@ -732,7 +785,7 @@ class Oplist:
 	def ListOps(self,ssbot,event):
 		c = 0
 		for name,lvl in self.__ops_dict.iteritems():
-			if(event.plvl <= lvl):
+			if(event.plvl >= lvl):
 				ssbot.sendReply(event,"OP:%25s:%i" %(name,lvl))
 			c+=1
 		if c == 0:
@@ -1097,7 +1150,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		mid[3] = (mid[3] % 24) + 7
 		return struct.unpack_from('<I', mid.tostring())[0]
 	
-	def connectToServer(self, hostname, port, username, password, arena='#master'):
+	def connectToServer(self, hostname, port, username, password, arena='#master',new_connection=True):
 		"""Connect to a server using the Subspace protocol.
 		
 		hostname and port specify the hostname/IP address and port of the server to connect to.  username is
@@ -1438,6 +1491,11 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		if player:
 			event = GameEvent(EVENT_SCORE_UPDATE)
 			#event.pid = pid
+			event.old_flag_points = player.flag_points
+			event.old_kill_points = player.kill_points
+			event.old_wins = player.wins
+			event.old_losses = player.losses
+			
 			player.flag_points = flag_points
 			player.kill_points = kill_points
 			player.wins = wins

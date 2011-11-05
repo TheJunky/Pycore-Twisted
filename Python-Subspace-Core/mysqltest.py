@@ -94,7 +94,7 @@ class Bot(BotInterface):
 			r.GenericResultPrettyPrinter(ssbot,r.query.data[0],r.query.data[1])
 		
 	def Cleanup(self):
-		self._db.CleanUp()
+		pass
 
 if __name__ == '__main__': #bot runs in this if not run by master u can ignore this 
 	botMain(Bot,False,True)

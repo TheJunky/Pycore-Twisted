@@ -51,20 +51,27 @@ class BotInstance(Thread):
 				bot = LoadBot(ssbot,m[0],m[1],self.inifile,self.args,logging.getLogger("ML." +self.type +"."+ m[0]))
 				if bot:
 					BotList.append (bot)
-				bot = None 
-			#while 1:
-			ssbot.connectToServer(self.host, self.port,
-								 self.bname,self.bpassword, self.arena)	
-			while ssbot.isConnected() and self.keepgoing:
-					event = ssbot.waitForEvent()
-					for b in BotList:
-						b.HandleEvents(ssbot,event);
-				#if ssbot.shouldReconnect() and self.keepgoing:
-				#	self.logger.debug("disconnected...reconnecting")				
-				#	ssbot.resetState()
-				#	time.sleep(180)
-				#else:
-				#	break
+				bot = None
+			retry = 0	 
+			while self.keepgoing:
+				ssbot.connectToServer(self.host, 
+									self.port,
+									self.bname,
+									self.bpassword, 
+									self.arena)	
+				while ssbot.isConnected() and self.keepgoing:
+						retry = 0
+						event = ssbot.waitForEvent()
+						for b in BotList:
+							b.HandleEvents(ssbot,event);
+				if 	ssbot.shouldReconnect() and retry < 6:	
+					self.logger.debug("Disconnected...")				
+					ssbot.resetState()
+					retry +=1
+					time.sleep(60*retry)
+					self.logger.debug("Reconnecting...")
+				else:
+					break
 
 		except:
 			LogException(self.logger)  

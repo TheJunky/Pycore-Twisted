@@ -82,11 +82,12 @@ class Bot(BotInterface):
 			if bconfig != None :
 				validname = None
 				for n in self.GenerateValidNames(type):
-					if(n in self._instances):
+					if(n.lower() in self._instances):
 						continue
 					else:
 						validname = n
 						break
+				self.logger.info(validname)
 				if(validname != None):
 					self._last_instance_id+= 1
 					arena = event.arguments[1]
@@ -307,24 +308,26 @@ def MasterMain():
 			if bot:
 				BotList.append (bot)
 			bot = None
-		
-		#while 1:
-		ssbot.connectToServer(config.Host,
-							  config.Port, 
-							  config.MasterName, 
-							  config.MasterPassword,
-							  config.MasterArena)		   
-		while ssbot.isConnected():
-				event = ssbot.waitForEvent()
-				for b in BotList:
-					b.HandleEvents(ssbot,event)
-		logger.critical("Master disconnected")
-			#if ssbot.shouldReconnect():				
-			#	ssbot.resetState()
-			#	time.sleep(120)
-			#	logger.critical("Reconnecting")
-			#else:
-			#	break	
+		wait_time = 0
+		while ssbot.shouldReconnect():
+			ssbot.connectToServer(config.Host,
+								  config.Port, 
+								  config.MasterName, 
+								  config.MasterPassword,
+								  config.MasterArena)		   
+			while ssbot.isConnected():
+					wait_time = 0
+					event = ssbot.waitForEvent()
+					for b in BotList:
+						b.HandleEvents(ssbot,event)
+			logger.critical("Master disconnected")
+			if ssbot.shouldReconnect():				
+				ssbot.resetState()
+				wait_time+=60
+				if wait_time > 600: #if wait is over 10 mins reset wait period
+					wait_time = 0
+				time.sleep(wait_time) # wait a little longer if retry fails each time
+				logger.critical("Reconnecting")	
 		
 	except (KeyboardInterrupt, SystemExit):
 		logger.critical("CTRL-c or System.exit() detected")	
@@ -344,7 +347,7 @@ def MasterMain():
 		
 		
 if __name__ == '__main__':
-	profile = True
+	profile = False
 	if profile:
 		import cProfile
 		filename = time.strftime("bot-%a-%d-%b-%Y-%H-%M-%S.profile", time.gmtime())

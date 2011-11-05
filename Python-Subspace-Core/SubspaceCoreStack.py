@@ -94,7 +94,7 @@ class CoreStack:
 		
 		#for the external loop will be set to false if we disconnect from server
 		#ie !stopbot
-		self.reconnect = False 
+		self.reconnect = True 
 	
 	
 	def resetState(self):#for recop
@@ -116,10 +116,9 @@ class CoreStack:
 		"""Adds CoreEvent to the list for handling."""
 		self.__event_list.append(core_event)
 		
-	def connectToServer(self, server, port):
+	def connectToServer(self, server, port,newconn=1):
 		"""Connect to the server, otherwise raise an exception."""
-		self.__server = str(server)
-		self.__port = int(port)
+
 		self.__total_packets_sent = 0
 		self.__total_packets_received = 0
 		self.__next_outgoing_ack_id = 0
@@ -129,13 +128,16 @@ class CoreStack:
 		self.__event_tick_tick_accumulator = 0
 		self.__last_wait_for_event_call_tick = GetTickCountHs()
 		self.__last_core_periodic_event_tick = GetTickCountHs()
-		
+
+		self.__server = str(server)
+		self.__port = int(port)
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.__socket.connect((server, port))
 		self.__socket.setblocking(True) #changed for jython support doesnt seem to affect python
 		self.__socket.settimeout(.01)
 		self.__timeout_interval = 0.01
-		
+
+			
 		STATE_NONE = 0
 		STATE_CHALLENGE_RECEIVED = 1
 		STATE_CONNECTED = 2
