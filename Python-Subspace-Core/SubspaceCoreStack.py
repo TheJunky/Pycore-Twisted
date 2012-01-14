@@ -9,6 +9,7 @@ import traceback
 import SubspaceEncryption
 import time
 import math
+import select
 from SubspaceFileChecksum import FileChecksum
 
 
@@ -312,6 +313,9 @@ class CoreStack:
 		while 1:
 			if len(self.__packet_queues[PRIORITY_HIGH]) == 0 and len(self.__packet_queues[PRIORITY_NORMAL]) == 0:
 				break
+			# check to make sure outbound socket is writable
+			rlist, wlist, xlist = select.select([], [self.__socket], [], .001)
+			if len(wlist) == 0: break
 		
 			packet = self.__generateNextOutboundPacket()
 			if packet:
@@ -420,12 +424,18 @@ class CoreStack:
 			
 			# nothing left to do, wait on an event
 			timeout = float(EVENT_TICK_INTERVAL - self.__event_tick_tick_accumulator) / 100
+			# if there are no packets to be sent, just wait for a read
+			# otherwise wait for a read or the outbound socket to be writable
+			if len(self.__packet_queues[PRIORITY_HIGH]) == 0 and len(self.__packet_queues[PRIORITY_NORMAL]) == 0:
+				select.select([self.__socket], [], [], timeout)
+			else:
+				select.select([self.__socket], [self.__socket], [], timeout)
 
 	def __processIncomingPackets(self):
 		"""Process all incoming packets."""
 		# process incoming packets, if any exist
 		while True:
-			packet = self.__readRawPacket(.0001)
+			packet = self.__readRawPacket(.005)
 			if packet is None: break
 			self.__processIncomingPacket(packet)
 			
@@ -492,15 +502,20 @@ class CoreStack:
 			
 	def __readRawPacket(self, timeout):
 		"""Read a raw packet on the network, optionally blocking on the socket."""
-		try:
-			if self.__timeout_interval != timeout:
-				self.__timeout_interval = timeout
-				self.__socket.settimeout(self.__timeout_interval)
-			packet = self.__socket.recv(MAX_PACKET)
-		except socket.timeout as e:
-			#self.logger.info("timeout")
-			return
-			
+		rlist, wlist, xlist = select.select([self.__socket], [], [], timeout)
+		if len(rlist) == 0:
+			return None
+
+#		try:
+#			if self.__timeout_interval != timeout:
+#				self.__timeout_interval = timeout
+#				self.__socket.settimeout(self.__timeout_interval)
+#			packet = self.__socket.recv(MAX_PACKET)
+#		except socket.timeout as e:
+#			#self.logger.info("timeout")
+#			return
+		packet = rlist[0].recv(MAX_PACKET)
+	
 		self.__total_packets_received += 1
 		
 		# decrypt the packet

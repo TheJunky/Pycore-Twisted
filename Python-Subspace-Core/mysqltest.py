@@ -17,6 +17,7 @@ class Bot(BotInterface):
 		bot.registerModuleInfo(__name__,"MysqLtest","The Junky","mysqlclient for ss",".01")
 		self._db = Amysql(self.logger)
 		self._db.setDbCredentialsFromFile(self.module_path + R"/db.conf","db")
+		#self._db.setDbCredentialsFromFile(self.module_path + R"/egnetdb.conf","db")
 		self._db.start()
 		self.clist = [COMMAND_TYPE_PUBLIC,COMMAND_TYPE_TEAM,COMMAND_TYPE_FREQ,COMMAND_TYPE_PRIVATE,COMMAND_TYPE_CHAT]
 		self._sql_command_id = bot.registerCommand('!sql',None,9,self.clist,"web","[query]" , 'sql it zz')
@@ -97,5 +98,5 @@ class Bot(BotInterface):
 		pass
 
 if __name__ == '__main__': #bot runs in this if not run by master u can ignore this 
-	botMain(Bot,False,True)
+	botMain(Bot,False,True,"#master")
 

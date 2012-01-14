@@ -33,6 +33,7 @@ class BotInstance(Thread):
 		self.args = args
 	def RequestStop(self):
 		self.keepgoing = False
+		self.ssbot.reconnect = False
 		if self.ssbot != None:
 			self.ssbot.disconnectFromServer()
 	def queueBroadcast(self,event):#used by master

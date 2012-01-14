@@ -134,7 +134,7 @@ def botMain(Bot,debug=False,isMaster=False,arena="#python"):
 		logger.addHandler(console)
 	
 		
-		filehandler  = logging.FileHandler(os.getcwd()+ R"/"+  __name__  +".log",mode='a')
+		filehandler  = logging.FileHandler(os.path.join(os.getcwd(), __name__  +".log"),mode='a')
 		filehandler.setLevel(logging.ERROR)
 		filehandler.setFormatter(formatter)
 		logger.addHandler(filehandler)

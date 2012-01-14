@@ -450,6 +450,7 @@ WEAPONS_THOR=		   8
 #misc definitions
 COORD_NONE = 0xFFFF
 PID_NONE = 0xFFFF
+FREQ_NONE = 0xFFFF
 			
 
 class GameEvent:
@@ -721,12 +722,9 @@ MAX_FLAGS = 256
 class Flag():
 	def __init__(self,id,pid=0xFFFF,freq=0xFFFF,x=0xFFFF,y=0xFFFF):
 		self.id=id
-		self.carried_by_pid=pid
-		self.dropped_by_pid=0xFFFF
-		self.tick = 0
-		self.freq=freq
-		self.x=x
-		self.y=y
+		self.freq=freq #if == FREQ_NONE flag neuted
+		self.x=x #if == coord_none  flag is carried
+		self.y=y #if == coord_none  flag is carried
 
 MAX_BALLS = 8
 
@@ -826,7 +824,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		"""Initialize the CoreStack class. If debug is set debugging messages will be displayed."""
 		CoreStack.__init__(self, debug, logger)
 		self.__core_about = "Python-SubspaceBot By cycad <cycad@zetasquad.com>"
-		self.__core_version = "0.002c"
+		self.__core_version = "0.002d"
 		self.__debug = debug
 		self.__players_by_pid = {} # pid : Player
 		self.__players_by_name = {} # name: Player
@@ -922,6 +920,8 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		self.__event_postprocessors = {
 
 			EVENT_LOGIN : self.__eventLoginPostprocessor,
+			EVENT_CHANGE: self.__neutFlagsCarriedByPlayerProccessor,
+			EVENT_LEAVE : self.__neutFlagsCarriedByPlayerProccessor,
 			EVENT_FLAG_PICKUP : self.__eventFlagPickupPostprocessor,
 			EVENT_FLAG_DROP : self.__eventFlagDropPostprocessor,
 			EVENT_KILL : self.__eventKillPostprocessor
@@ -1482,6 +1482,10 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		event = GameEvent(EVENT_FLAG_VICTORY)
 		event.freq = freq
 		event.points = points
+		for f in self.flag_list:
+			f.freq = FREQ_NONE
+			f.x = COORD_NONE
+			f.y = COORD_NONE
 		#addpostprocessor and reset flag state
 		self.__addPendingEvent(event)
 
@@ -1526,7 +1530,6 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			event.player = player
 			event.flag_id = flag_id
 			event.flag = flag
-			event.transferred_from = flag.carried_by_pid
 			#self.sendPublicMessage("fp/ft %d:%x->%x"%(flag_id,flag.carried_by_pid,pid))
 			self.__addPendingEvent(event)
 
@@ -1535,7 +1538,6 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		event.flag.x = COORD_NONE
 		event.flag.y = COORD_NONE
 		event.player.flag_count+=1
-		event.flag.carried_by_pid = event.player.pid
 		event.flag.freq = event.player.freq		
 		
 	def __handleFlagDropPacket(self, packet):
@@ -1551,14 +1553,6 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	def __eventFlagDropPostprocessor(self,event):
 		player = event.player
 		player.flag_count = 0
-		pid = player.pid
-		freq = player.freq
-		for f in self.flag_list: #set flags he had to dropped in flaglist
-			if f.carried_by_pid == pid:
-				f.carried_by_pid = PID_NONE
-				f.dropped_by_pid = pid
-				f.tick = GetTickCountHs()
-				f.freq = freq
 		
 	def __handleScoreResetPacket(self, packet):
 		type, pid = struct.unpack_from("<BH", packet)
@@ -1703,11 +1697,12 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			pass
 		elif login_response == 0x0D: #biller down
 			self.billing = False
-		elif login_response == 0x0A:
+		elif login_response == 0x0E:
 			self.__log(DEBUG,"Server Busy, try again later")
 			self.__connected = False
 		else:
 			raise Exception("Login Error:%s" % self.__login_response[login_response])
+	
 	
 	def __handleShipchangePacket(self, packet):
 		type, ship, pid, freq = struct.unpack_from("<BBHH", packet)
@@ -1730,6 +1725,14 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			event.new_ship = player.ship
 			event.player = player
 			self.__addPendingEvent(event)
+	
+	def __neutFlagsCarriedByPlayerProccessor(self,event):
+		"""
+			set flags carried by event_player to neuted
+		"""
+		p = event.player
+		p.flag_count = 0
+					
 	
 	def __handleShipChangePacketSelf(self, packet):
 		"""Handle a ship change packet for the bot itself."""
@@ -2411,11 +2414,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			self.__addPendingEvent(event)
 	
 	def __eventKillPostprocessor(self,event):
-		if event.flags_transfered > 0:
-			for f in self.flag_list:
-				if event.killed.pid == f.carried_by_pid:
-					f.carried_by_pid = event.killer.pid
-					f.tick = GetTickCountHs()
+		pass
 				
 	def __handleArenaListPacket(self, packet):
 		"""'arenaname\x00\xFF\xFF'"""

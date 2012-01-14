@@ -277,7 +277,7 @@ class Amysql(threading.Thread):
 			r = AResult()
 			r.executeQueryAndStoreResults(self.conn,self.cursor,q)
 		else:
-			self.logger.ERROR("DBNotConnected cant execute:" + q.text)
+			self.logger.error("DBNotConnected cant execute:" + q.text)
 		return r
 	def __dequeue_query(self):
 		q = None

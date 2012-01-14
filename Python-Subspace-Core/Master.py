@@ -33,7 +33,7 @@ class Bot(BotInterface):
 		self.listhandler = ListHandler(logging.DEBUG,self.max_recs)
 		formatter = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s:%(message)s')
 		self.listhandler.setFormatter(formatter)
-		self.listhandler.LoadFromFile(os.getcwd()+ R"/Bots.log")
+		self.listhandler.LoadFromFile(os.path.join(os.getcwd(),"Bots.log"))
 		self.logger.addHandler(self.listhandler)
 
 		self.logger.info("Master Bot Started")
@@ -59,6 +59,12 @@ class Bot(BotInterface):
 		else:
 			validnames.append (name)
 		return validnames
+	
+	def StopAllBots(self):
+		for k,v in self._instances.iteritems():
+			if v.is_alive()==1:
+				v.RequestStop()
+				self.logger.critical("Requested Stop for "+v.bname)
 
 	def DeleteInactiveBots(self):
 		keys2del = []
@@ -70,49 +76,60 @@ class Bot(BotInterface):
 		for k in keys2del:
 			del self._instances[k]
 	def HCShutdown(self,ssbot,event):
+		self.StopAllBots()
+		ssbot.reconnect = False
 		ssbot.disconnectFromServer()
 		ssbot.sendReply(event,"ok" )
 		self.logger.critical("Master is being Shutdown command issued by: " + event.pname)
 		#raise ShutDownException("Master is being Shutdown command issued by: " + event.pname)
+	
+	def StartBot(self,ssbot,pname,type,arena,args):
+		bconfig = self.GetBotConfig(type)
+		if bconfig != None :
+			validname = None
+			for n in self.GenerateValidNames(type):
+				if(n.lower() in self._instances):
+					continue
+				else:
+					validname = n
+					break
+			if(validname != None):
+				self._last_instance_id+= 1
+				newbot = BotInstance.BotInstance(self._last_instance_id,
+											  bconfig.Type,
+											  bconfig.Description,
+											  pname,
+											  bconfig.Name,
+											  bconfig.Password,
+											  bconfig.ConfigurationFile,
+											  self.config.Host,
+											  self.config.Port,
+											  arena,
+											  bconfig.Modules,
+											  self.__queue,
+											  args,
+											  logging.getLogger("ML." + bconfig.Type))
+				self._instances[newbot.bname.lower()] = newbot
+				newbot.start()
+				self.logger.info("%s started to %s by %s"%(bconfig.Type,arena,pname))
+				return 1 #success
+			else:
+				return -2 #all bots of type used
+		else:
+			return -1 #type not found
 	def HCStartBot(self,ssbot,event):
 		self.DeleteInactiveBots()
 		if len(event.arguments) >= 2:
 			type = event.arguments[0]
-			bconfig = self.GetBotConfig(type)
-			if bconfig != None :
-				validname = None
-				for n in self.GenerateValidNames(type):
-					if(n.lower() in self._instances):
-						continue
-					else:
-						validname = n
-						break
-				self.logger.info(validname)
-				if(validname != None):
-					self._last_instance_id+= 1
-					arena = event.arguments[1]
-					newbot = BotInstance.BotInstance(self._last_instance_id,
-												  bconfig.Type,
-												  bconfig.Description,
-												  event.pname,
-												  bconfig.Name,
-												  bconfig.Password,
-												  bconfig.ConfigurationFile,
-												  self.config.Host,
-												  self.config.Port,
-												  arena,
-												  bconfig.Modules,
-												  self.__queue,
-												  event.arguments_after[2] if len(event.arguments) > 2 else "",
-												  logging.getLogger("ML." + bconfig.Type))
-					self._instances[newbot.bname.lower()] = newbot
-					newbot.start()
-					ssbot.sendReply(event, "ok")
-					self.logger.info("%s started to %s by %s"%(bconfig.Type,arena,event.pname))
-				else:
-					ssbot.sendReply(event, "all %s in use"%(type))
-			else:
+			arena = event.arguments[1]
+			args = event.arguments_after[2] if len(event.arguments) > 2 else ""
+			r =  self.StartBot(ssbot, event.pname, type, arena, args);
+			if r == 1:
+				ssbot.sendReply(event,"ok")
+			elif r == -1:
 				ssbot.sendReply(event,"Error:type(%s) not found"%(type))
+			elif r == -2:
+				ssbot.sendReply(event, "all %s in use"%(type))
 		else:
 			ssbot.sendReply(event, "Usage: !startbot type arena")
 
@@ -218,7 +235,14 @@ class Bot(BotInterface):
 			and len(event.user_data) == 2): 
 				if event.user_data[0] == 1:#start a bot
 					t = event.user_data[1]
-					ssbot.sendPublicMessage("!sb %s %s" % t)
+					#ssbot.sendPublicMessage("!sb %s %s" % t)
+					r =  self.StartBot(ssbot, ssbot.name, t[0], t[1], "");
+					if r == 1:
+						ssbot.sendPublicMessage("autospawn:successfull spawned %s to %s"%t)
+					elif r == -1:
+						ssbot.sendPublicMessage("autospawn:Error:type(%s) not found"%(t[0]))
+					elif r == -2:
+						ssbot.sendPublicMessage("autospawn:all %s in use"%(t[0]))
 				elif event.user_data[0] == 2:#do maintenance
 					self.DeleteInactiveBots()
 					self.listhandler.RemoveOld()
@@ -246,7 +270,7 @@ def MasterMain():
 		#other bots use logging i dont want it to spamm the main logger
 		rootlogger = logging.getLogger('')
 		rootlogger.addHandler(NullHandler())
-		rootlogger.setLevel(logging.CRITICAL)
+		rootlogger.setLevel(logging.DEBUG)
 		#logging.basicConfig(level=logging.ERROR,
 		#					format='%(asctime)s:%(name)s:%(levelname)s:%(message)s',
 		#					datefmt='%m-%d %H:%M')
@@ -268,7 +292,7 @@ def MasterMain():
 		logger.addHandler(console)
 	
 		
-		filehandler  = logging.FileHandler(os.getcwd()+ R"/Bots.log",mode='a')
+		filehandler  = logging.FileHandler(os.path.join(os.getcwd(),"Bots.log"),mode='a')
 		filehandler.setLevel(logging.ERROR)
 		filehandler.setFormatter(formatter)
 		logger.addHandler(filehandler)
@@ -278,7 +302,7 @@ def MasterMain():
 		
 		parser.add_option("-c", "--ConfigFile", dest="ConfigFile",
 					  help="Load Configuration from a non default file",
-					  default=os.getcwd() + R"\Bots.json")
+					  default=os.path.join(os.getcwd(),"Bots.json"))
 		
 		
 		parser.add_option("-p", "--Password", dest="Password",
@@ -334,16 +358,19 @@ def MasterMain():
 	except:
 		logger.critical("Unhandled Exception")
 		LogException(logger)
-		
 	finally:
 		if ssbot.isConnected():
 			ssbot.disconnectFromServer()
 		logger.info( "Master disconnected" )
 		logger.info( "Waiting For Bots to stop")
+		logger.critical("Master shutting down")
+		master.StopAllBots()
+		logger.critical("Requested Stop for all active bots...")
 		for b in BotList:
 			b.Cleanup()
-		logger.critical("Master shutting down")
+		logger.critical("Master Bot behaviors cleansed")
 		filehandler.close()
+		sys.exit(1)
 		
 		
 if __name__ == '__main__':
