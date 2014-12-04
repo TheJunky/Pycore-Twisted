@@ -134,7 +134,7 @@ def botMain(Bot,debug=False,isMaster=False,arena="#python"):
 		logger.addHandler(console)
 	
 		
-		filehandler  = logging.FileHandler(os.path.join(os.getcwd(), __name__  +".log"),mode='a')
+		filehandler  = logging.FileHandler(os.getcwd()+ R"/"+  __name__  +".log",mode='a')
 		filehandler.setLevel(logging.ERROR)
 		filehandler.setFormatter(formatter)
 		logger.addHandler(filehandler)
@@ -148,7 +148,7 @@ def botMain(Bot,debug=False,isMaster=False,arena="#python"):
 		bot = Bot(ssbot,md)
 	
 		
-		ssbot.connectToServer('66.235.184.102', 7900, botname, botpassword, arena)		   
+		ssbot.connectToServer('66.36.247.83', 7900, botname, botpassword, arena)		   
 		
 		while ssbot.isConnected():
 			event = ssbot.waitForEvent()

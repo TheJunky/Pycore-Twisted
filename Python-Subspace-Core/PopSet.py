@@ -50,7 +50,7 @@ class Bot(BotInterface):
 		self.cmdlt = ssbot.registerCommand('!listTransition', "!lt",
 								0,COMMAND_LIST_PP,
 								"Popset", "","list all transitions/settings")
-		self.normal = Tier(20,["Team:MaxPerTeam:10","Team:MaxPerPrivateTeam:10","Door:DoorMode:0"],"Normal",15*60)
+		self.normal = Tier(20,["Team:MaxPerTeam:10","Team:MaxPerPrivateTeam:10"],"Normal",15*60)
 		self.tiers = [
 			Tier(10,["Team:MaxPerTeam:5","Team:MaxPerPrivateTeam:5"],"Small",3*60),
 			Tier(16,["Team:MaxPerTeam:8","Team:MaxPerPrivateTeam:8"],"Medium",10*60),		
@@ -112,10 +112,7 @@ class Bot(BotInterface):
 			if timer_expired:
 				if timer_expired.data == 1: #timer_expired is now the data we passed to timer
 					self.doTransition(ssbot)
-					if self.current:
-						self.tm.set(self.current.getNextTimerDelay(), 1)
-					else:
-						self.tm.set(60, 1)	
+					self.tm.set(5*60, 1) # changed by serexl on 12/15, originally self.tm.set(self.current.getNextTimerDelay(), 1)
 	def Cleanup(self):
 		#put any cleanup code in here this is called when bot is about to die
 		pass

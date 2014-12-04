@@ -155,7 +155,8 @@ class S2C_Irregular_Packets(ParserInterface):
 		return self.__parsed;
 	def Clear(self):
 		self.__parsed = 0									
-class Usage(ParserInterface):
+class Usage(
+):
 	__pattern =re.compile("TIME: Session:\s*([0-9]+):([0-9]+):([0-9]+)\s*Total:\s*([0-9]+):([0-9]+):([0-9]+)\s*Created:\s*([0-9]+)-([0-9]+)-([0-9]+)\s+([0-9]+):([0-9]+):([0-9]+)")
 	__startswith = "TIME: Session:"
 	def __init__(self):	
@@ -237,6 +238,29 @@ class Info:
 			#print "parsed "  + self.id.name
 			return 1
 		return 0
+class Einfo():
+	def __init__(self):
+		self.name = None
+		self.resx= None
+		self resy = None
+		self.client= None
+		self.idle = None
+		self.proxy = None
+		self.timerdrift= None
+		
+	def Parse(self,line):
+		#Ratio: UserId: 111111  Res: 1920x1080  Client: Continuum 0.40  Proxy: Using NAT  Idle: 0 s  Timer drift: 0
+		t0 = line.find(': UserId:')
+		self.name = line[0:t0]
+		line = line[t0:]
+		if t0:
+			t1 = line.find("Res:")
+			t2= line.find("Client:")
+			t3 = line.find('Proxy:')
+			t4 = line.find("Idle:")
+			t5= line.find("s  Timer drift:")
+		
+		
 if __name__ == '__main__':#test
 	info = Info()
 	for l in msg_list:

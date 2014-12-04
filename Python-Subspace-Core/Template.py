@@ -4,6 +4,7 @@ from SubspaceBot import *
 from BotUtilities import *
 
 
+
 class Bot(BotInterface):
 	def __init__(self,ssbot,md):
 		BotInterface.__init__(self,ssbot,md)
@@ -37,6 +38,11 @@ class Bot(BotInterface):
 			pass
 		elif (event.type == EVENT_COMMAND and event.command.id in self.cmd_dict):
 			self.cmd_dict[event.command.id](ssbot,event)
+		elif event.type == EVENT_TICK:
+			timer_expired = self.tm.getExpired()
+			if timer_expired:
+				if timer_expired.data == 1: #timer_expired is now the data we passed to timer
+					pass
 		elif event.type == EVENT_DISCONNECT:
 			pass	
 	def cmdWTF(self,ssbot,event):

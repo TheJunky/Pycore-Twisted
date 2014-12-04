@@ -80,7 +80,7 @@ class LVZMapObject:
 		self.__y_pos = y_pos
 		self.__updateInfo |= 1 << 0
 	
-	def getXCoordinates(self):
+	def getYCoordinates(self):
 		return self.__y_pos
 
 	def setCoordinates(self,x_pos,y_pos):

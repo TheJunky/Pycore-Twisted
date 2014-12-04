@@ -79,6 +79,7 @@ class AResult(AElement):
 		self.query = q
 		try:
 			cursor.execute(q.text,q.tuple)
+			conn.commit()
 			self.last_row_id = conn.insert_id()
 			self.info = conn.info()
 			self.description = cursor.description
@@ -258,6 +259,7 @@ class Amysql(threading.Thread):
 			m.id = m.DB_CONNECTED
 			m.message = "DBCONNECTED"
 			#self.logger.info("DB CONNECTED")
+			self.conn.autocommit(True)
 
 		except MySQLdb.Error, e:
 			m.id = m.DB_NOT_CONNECTED
@@ -273,11 +275,12 @@ class Amysql(threading.Thread):
 		"""
 		if(q == None):
 			return None;
-		if self.cursor:
-			r = AResult()
-			r.executeQueryAndStoreResults(self.conn,self.cursor,q)
-		else:
-			self.logger.error("DBNotConnected cant execute:" + q.text)
+		self.cursor = self.conn.cursor()
+		r = AResult()
+		r.executeQueryAndStoreResults(self.conn,self.cursor,q)
+		self.cursor.close()
+		#else:
+		#	self.logger.error("DBNotConnected cant execute:" + q.text)
 		return r
 	def __dequeue_query(self):
 		q = None
@@ -313,9 +316,11 @@ class Amysql(threading.Thread):
 			if q.getType() == q.TYPE_QUERY:
 				r = self.__execute_query(q)
 				self.__enqueue_results(r)
+				self.conn.commit()
 			elif q.getType() == AElement.TYPE_MESSAGE and q.id == AMessage.PING:
 				if self.conn:# has connected in the past
 					self.conn.ping()
+					pass
 				else:#never connected try again
 					m = self.__connect_to_db()
 					self.__enqueue_results(m) 	

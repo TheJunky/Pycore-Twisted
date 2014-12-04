@@ -9,8 +9,8 @@ from SubspaceBot import *
 from BotUtilities import *
 from BotConfig import GlobalConfiguration
 import BotInstance
-import time
 import copy
+import os
 
 class Bot(BotInterface):
 	def __init__(self,ssbot,md,config,MQueue):
@@ -42,20 +42,20 @@ class Bot(BotInterface):
 		
 		self.__queue = MQueue
 		
-	def GetBotConfig(self,type):
+	def GetBotConfig(self,btype):
 		for b in self.config.Bots.values():
-			if b.Type.lower() == type.lower():
+			if b.Type.lower() == btype.lower():
 				return b
 		else:
 			return None
-	def GenerateValidNames(self,type):
-		bconfig = self.GetBotConfig(type)
+	def GenerateValidNames(self,btype):
+		bconfig = self.GetBotConfig(btype)
 		maxbots = bconfig.MaxBots
 		validnames = []
 		name = bconfig.Name
 		if(maxbots > 1):
 			for i in range(1,maxbots):
-				validnames.append (  name + i )
+				validnames.append (  name + str(i) )
 		else:
 			validnames.append (name)
 		return validnames
@@ -83,11 +83,11 @@ class Bot(BotInterface):
 		self.logger.critical("Master is being Shutdown command issued by: " + event.pname)
 		#raise ShutDownException("Master is being Shutdown command issued by: " + event.pname)
 	
-	def StartBot(self,ssbot,pname,type,arena,args):
-		bconfig = self.GetBotConfig(type)
+	def StartBot(self,ssbot,pname,btype,arena,args):
+		bconfig = self.GetBotConfig(btype)
 		if bconfig != None :
 			validname = None
-			for n in self.GenerateValidNames(type):
+			for n in self.GenerateValidNames(btype):
 				if(n.lower() in self._instances):
 					continue
 				else:
@@ -99,7 +99,7 @@ class Bot(BotInterface):
 											  bconfig.Type,
 											  bconfig.Description,
 											  pname,
-											  bconfig.Name,
+											  validname,
 											  bconfig.Password,
 											  bconfig.ConfigurationFile,
 											  self.config.Host,
@@ -120,10 +120,10 @@ class Bot(BotInterface):
 	def HCStartBot(self,ssbot,event):
 		self.DeleteInactiveBots()
 		if len(event.arguments) >= 2:
-			type = event.arguments[0]
+			btype = event.arguments[0]
 			arena = event.arguments[1]
 			args = event.arguments_after[2] if len(event.arguments) > 2 else ""
-			r =  self.StartBot(ssbot, event.pname, type, arena, args);
+			r =  self.StartBot(ssbot, event.pname, btype, arena, args);
 			if r == 1:
 				ssbot.sendReply(event,"ok")
 			elif r == -1:
@@ -370,11 +370,11 @@ def MasterMain():
 			b.Cleanup()
 		logger.critical("Master Bot behaviors cleansed")
 		filehandler.close()
-		sys.exit(1)
+		os._exit(1)
 		
 		
 if __name__ == '__main__':
-	profile = False
+	profile = True
 	if profile:
 		import cProfile
 		filename = time.strftime("bot-%a-%d-%b-%Y-%H-%M-%S.profile", time.gmtime())

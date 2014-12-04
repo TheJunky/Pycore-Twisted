@@ -134,8 +134,8 @@ class CoreStack:
 		self.__port = int(port)
 		self.__socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 		self.__socket.connect((server, port))
-		self.__socket.setblocking(True) #changed for jython support doesnt seem to affect python
-		self.__socket.settimeout(.01)
+		self.__socket.setblocking(False) #changed for jython support doesnt seem to affect python
+		#self.__socket.settimeout(.01)
 		self.__timeout_interval = 0.01
 
 			
@@ -314,7 +314,7 @@ class CoreStack:
 			if len(self.__packet_queues[PRIORITY_HIGH]) == 0 and len(self.__packet_queues[PRIORITY_NORMAL]) == 0:
 				break
 			# check to make sure outbound socket is writable
-			rlist, wlist, xlist = select.select([], [self.__socket], [], .001)
+			rlist, wlist, xlist = select.select([], [self.__socket], [], 0)
 			if len(wlist) == 0: break
 		
 			packet = self.__generateNextOutboundPacket()
@@ -435,7 +435,7 @@ class CoreStack:
 		"""Process all incoming packets."""
 		# process incoming packets, if any exist
 		while True:
-			packet = self.__readRawPacket(.005)
+			packet = self.__readRawPacket(0)
 			if packet is None: break
 			self.__processIncomingPacket(packet)
 			
@@ -504,6 +504,7 @@ class CoreStack:
 		"""Read a raw packet on the network, optionally blocking on the socket."""
 		rlist, wlist, xlist = select.select([self.__socket], [], [], timeout)
 		if len(rlist) == 0:
+			time.sleep(0.01)
 			return None
 
 #		try:

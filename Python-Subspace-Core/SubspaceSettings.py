@@ -7,7 +7,7 @@ Adapted from mervbot/asss to pybot
 
 '''
 import struct
-
+import array
 
 class BitSet(object):
 	"""
@@ -88,7 +88,7 @@ class ShipSettings(object):					# 144 bytes wide, offsets are for warbird
 		self.RocketTime=struct.unpack_from(fmt,packet,o)[0];o+=s				# 0092 All:RocketTime:::How long a Rocket lasts (in hundredths of a second)
 		self.InitialBounty=struct.unpack_from(fmt,packet,o)[0];o+=s			# 0094 All:InitialBounty:::Number of 'Greens' given to ships when they start
 		self.DamageFactor=struct.unpack_from(fmt,packet,o)[0];o+=s			# 0096 All:DamageFactor:::How likely a the ship is to take damamage (ie. lose a prize) (0=special-case-never, 1=extremely likely, 5000=almost never)
-		self.PrizeShareLimit=struct.unpack_from(fmt,packet,o)[0];o+=s			# 0098 All:PrizeShareLimit:::Maximum bounty that ships receive Team Prizes
+		self.PrizeShareLimit=struct.unpack_from(fmt,packet,o)[0];o+=s			# 0098 All:PrizeShareLimit:::Maximum Bounty that ships receive Team Prizes
 		self.AttachBounty=struct.unpack_from(fmt,packet,o)[0];o+=s			# 0100 All:AttachBounty:::Bounty required by ships to attach as a turret
 		self.SoccerThrowTime=struct.unpack_from(fmt,packet,o)[0];o+=s			# 0102 All:SoccerThrowTime:::Time player has to carry soccer ball (in hundredths of a second)
 		self.SoccerBallFriction=struct.unpack_from(fmt,packet,o)[0];o+=s		# 0104 All:SoccerBallFriction:::Amount the friction on the soccer ball (how quickly it slows down -- higher numbers mean faster slowdown)
@@ -135,7 +135,9 @@ class ShipSettings(object):					# 144 bytes wide, offsets are for warbird
 		struct.unpack_from("<I",packet,o))
 		o+=4
 		##print o
-		#BYTE UNKNOWN3[16];				# 0132 ?
+		self.UNKNOWN= [];				# 0132 ?
+		for i in range(16):
+			self.UNKNOWN.append(struct.unpack_from("<b",packet,o+i)[0])
 		o+=16
 		##print o
 
@@ -247,7 +249,7 @@ class arenaSettings(object):				# 1428 bytes wide
 		self.EnterDelay=struct.unpack_from(fmt,packet,o)[0];o+=s				# 1264 Kill:EnterDelay:::How long after a player dies before he can re-enter the game.
 		self.EngineShutdownTime=struct.unpack_from(fmt,packet,o)[0];o+=s		# 1266 Prize:EngineShutdownTime:::Time the player is affected by an 'Engine Shutdown' Prize (in hundredth of a second)
 		self.ProximityDistance=struct.unpack_from(fmt,packet,o)[0];o+=s		# 1268 Bomb:ProximityDistance:::Radius of proximity trigger in tiles.  Each bomb level adds 1 to this amount.
-		self.BountyIncreaseForKill=struct.unpack_from(fmt,packet,o)[0];o+=s	# 1270 Kill:BountyIncreaseForKill:::Number of points added to players bounty each time he kills an opponent.
+		self.BountyIncreaseForKill=struct.unpack_from(fmt,packet,o)[0];o+=s	# 1270 Kill:BountyIncreaseForKill:::Number of points added to players Bounty each time he kills an opponent.
 		self.BounceFactor=struct.unpack_from(fmt,packet,o)[0];o+=s			# 1272 Misc:BounceFactor:::How bouncy the walls are (16=no-speed-loss)
 		self.MapZoomFactor=struct.unpack_from(fmt,packet,o)[0];o+=s			# 1274 Radar:MapZoomFactor:8:1000:A number representing how far you can see on radar.
 		self.MaxBonus=struct.unpack_from(fmt,packet,o)[0];o+=s				# 1276 Kill:MaxBonus:::Let's ignore these for now. Or let's not. :) This is if you have flags, can add more points per a kill. Founded by MGB
@@ -281,7 +283,7 @@ class arenaSettings(object):				# 1428 bytes wide
 		self.EBombDamagePercent=struct.unpack_from(fmt,packet,o)[0];o+=s		# 1324 Bomb:EBombDamagePercent:::Percentage of normal damage applied to an EMP bomb 0=0% 1000=100% 2000=200%
 		self.RadarNeutralSize=struct.unpack_from(fmt,packet,o)[0];o+=s		# 1326 Radar:RadarNeutralSize:0:1024:Size of area between blinded radar zones (in pixels)
 		self.WarpPointDelay=struct.unpack_from(fmt,packet,o)[0];o+=s			# 1328 Misc:WarpPointDelay:::How long a Portal point is active.
-		self.NearDeathLevel=struct.unpack_from(fmt,packet,o)[0];o+=s			# 1330 Misc:NearDeathLevel:::Amount of energy that constitutes a near-death experience (ships bounty will be decreased by 1 when this occurs -- used for dueling zone)
+		self.NearDeathLevel=struct.unpack_from(fmt,packet,o)[0];o+=s			# 1330 Misc:NearDeathLevel:::Amount of energy that constitutes a near-death experience (ships Bounty will be decreased by 1 when this occurs -- used for dueling zone)
 		self.BBombDamagePercent=struct.unpack_from(fmt,packet,o)[0];o+=s		# 1332 Bomb:BBombDamagePercent:::Percentage of normal damage applied to a bouncing bomb 0=0% 1000=100% 2000=200%
 		self.ShrapnelDamagePercent=struct.unpack_from(fmt,packet,o)[0];o+=s	# 1334 Shrapnel:ShrapnelDamagePercent:::Percentage of normal damage applied to shrapnel (relative to bullets of same level) 0=0% 1000=100% 2000=200%
 		self.ClientSlowPacketTime=struct.unpack_from(fmt,packet,o)[0];o+=s	# 1336 Latency:ClientSlowPacketTime:20:200:Amount of latency S2C that constitutes a slow packet.
@@ -296,7 +298,10 @@ class arenaSettings(object):				# 1428 bytes wide
 		self.FlaggerSpeedAdjustment=struct.unpack_from(fmt,packet,o)[0];o+=s	# 1354 Flag:FlaggerSpeedAdjustment:::Amount of speed adjustment player carrying flag gets (negative numbers mean slower)
 		self.CliSlowPacketSampleSize=struct.unpack_from(fmt,packet,o)[0];o+=s	# 1356 Latency:ClientSlowPacketSampleSize:50:1000:Number of packets to sample S2C before checking for kickout.
 		#print o
-		#BYTE UNKNOWN1[10];				# 1358 ?
+		self.UNKNOWN1 =[]				# 1358 ?
+		for i in range(10):
+			self.UNKNOWN1.append(struct.unpack_from("<b",packet,o+i)[0])
+			#print ("arena self.UNKNOWN1[" +str(i)+"]="+str(self.UNKNOWN1[i]))
 		o+=10
 		s = 1
 		fmt = "<B"
@@ -325,6 +330,9 @@ class arenaSettings(object):				# 1428 bytes wide
 		self.SoccerUseFlagger=struct.unpack_from(fmt,packet,o)[0];o+=s			# 1390 Soccer:UseFlagger:0:1:If player with soccer ball should use the Flag:Flagger* ship adjustments or not (0=no, 1=yes)
 		self.SoccerBallLocation=struct.unpack_from(fmt,packet,o)[0];o+=s		# 1391 Soccer:BallLocation:0:1:Whether the balls location is displayed at all times or not (0=not, 1=yes)
 		#print o
-#		#BYTE UNKNOWN2[8];				# 1392 ?
+		self.UNKNOWN2 = [];				# 1392 ?
+		for i in range(8):
+			self.UNKNOWN2.append(struct.unpack_from("<b",packet,o+i)[0])
+			#print ("arena self.UNKNOWN2[" +str(i)+"]="+str(self.UNKNOWN2[i]))
 		o+=8
 		self.PrizeWeight = PrizeSettings(packet,o)				# 1400 See prizeSettings declaration...
