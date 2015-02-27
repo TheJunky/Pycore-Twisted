@@ -11,6 +11,8 @@ from BotConfig import GlobalConfiguration
 import BotInstance
 import copy
 import os
+from TimerManager import TimerManager
+
 
 class Bot(BotInterface):
 	def __init__(self,ssbot,md,config,MQueue):
@@ -19,6 +21,7 @@ class Bot(BotInterface):
 		self.config = config
 		self._cmd_handlers = { 
 		#Cmd_ID,								  cmd_handler_func
+		ssbot.registerCommand('!shutdown',None,7,COMMAND_LIST_ALL,"Master","" ,'Shutdown the master') : self.HCShutdown,
 		ssbot.registerCommand('!startbot',"!sb",2,COMMAND_LIST_ALL,"Master","[type] [arena]" ,'!startbot type arena') : self.HCStartBot,
 		ssbot.registerCommand('!killbot',"!kb",2,COMMAND_LIST_ALL,"Master","[name]", 'Stop a specific bot') : self.HCStopBot,
 		ssbot.registerCommand('!listbots',"!lb",2,COMMAND_LIST_ALL,"Master","" ,'lists all currently running bots') : self.HCListBots,
@@ -41,7 +44,14 @@ class Bot(BotInterface):
 			ssbot.addChat(config.MasterChats)
 		
 		self.__queue = MQueue
+		self.reactor= None
 		
+		self.tm = TimerManager()
+		
+	
+	def setReactor(self,reactor):
+		self.reactor=reactor
+			
 	def GetBotConfig(self,btype):
 		for b in self.config.Bots.values():
 			if b.Type.lower() == btype.lower():
@@ -77,12 +87,10 @@ class Bot(BotInterface):
 			del self._instances[k]
 	def HCShutdown(self,ssbot,event):
 		self.StopAllBots()
-		ssbot.reconnect = False
-		ssbot.disconnectFromServer()
 		ssbot.sendReply(event,"ok" )
 		self.logger.critical("Master is being Shutdown command issued by: " + event.pname)
-		#raise ShutDownException("Master is being Shutdown command issued by: " + event.pname)
-	
+		self.tm.set(10, (3,None))
+		
 	def StartBot(self,ssbot,pname,btype,arena,args):
 		bconfig = self.GetBotConfig(btype)
 		if bconfig != None :
@@ -110,7 +118,7 @@ class Bot(BotInterface):
 											  args,
 											  logging.getLogger("ML." + bconfig.Type))
 				self._instances[newbot.bname.lower()] = newbot
-				newbot.start()
+				newbot.AddToReactor(self.reactor)
 				self.logger.info("%s started to %s by %s"%(bconfig.Type,arena,pname))
 				return 1 #success
 			else:
@@ -220,21 +228,22 @@ class Bot(BotInterface):
 	def HandleEvents(self,ssbot,event):
 		if event.type == EVENT_COMMAND and event.command.id in self._cmd_handlers:
 			self._cmd_handlers[event.command.id](ssbot,event)
-		elif event.type == EVENT_TICK:
-			self.SendBroadcastsToAttachedBots(ssbot)
 		elif event.type == EVENT_LOGIN:
-			ssbot.setTimer(10, (2,None))# for periodic deleting of inactive bots and removing of old list entries from log
+			self.tm.set(10, (2,None))# for periodic deleting of inactive bots and removing of old list entries from log
 			c = 60#wait for bot to login
 			for b in self.config.AutoLoad:#stagger the bots to load by 180 sec each
 				c+=180
-				ssbot.setTimer(c, (1,b))
+				self.tm.set(c, (1,b))
 				self.logger.info("Queued:[Sb] %s -> %s" % b)
-		elif event.type == EVENT_TIMER:
-			if (event.user_data != None
-			and type(event.user_data) == types.TupleType
-			and len(event.user_data) == 2): 
-				if event.user_data[0] == 1:#start a bot
-					t = event.user_data[1]
+		elif event.type == EVENT_TICK:
+			self.SendBroadcastsToAttachedBots(ssbot)
+			#self.logger.info("tick")
+			timer_expired = self.tm.getExpired() # a timer expired
+			if timer_expired:
+				#self.logger.info("timer expired")
+				
+				if timer_expired.data[0] == 1:#start a bot
+					t = timer_expired.data[1]
 					#ssbot.sendPublicMessage("!sb %s %s" % t)
 					r =  self.StartBot(ssbot, ssbot.name, t[0], t[1], "");
 					if r == 1:
@@ -243,10 +252,14 @@ class Bot(BotInterface):
 						ssbot.sendPublicMessage("autospawn:Error:type(%s) not found"%(t[0]))
 					elif r == -2:
 						ssbot.sendPublicMessage("autospawn:all %s in use"%(t[0]))
-				elif event.user_data[0] == 2:#do maintenance
+				elif timer_expired.data[0] == 2:#do maintenance
 					self.DeleteInactiveBots()
 					self.listhandler.RemoveOld()
-					ssbot.setTimer(10, (2,None))
+					self.tm.set(10, (2,None))
+				elif timer_expired.data[0] == 3: #shutdown
+					self.logger.info("calling disconnect")
+					ssbot.disconnectFromServer()
+					#ssbot.stopReactor()
 	
 	def SendBroadcastsToAttachedBots(self,ssbot):
 		if self.__queue.size() > 0: # broadcasts waiting
@@ -259,11 +272,7 @@ class Bot(BotInterface):
 					b = self.__queue.dequeue()#will return None if there are none
 				
 	def Cleanup(self):
-		for v in self._instances.values():
-			v.RequestStop()
-		
-		for v in self._instances.values():
-			v.join(10)
+		pass
 
 def MasterMain():
 	try:
@@ -312,10 +321,18 @@ def MasterMain():
 		(options, args) = parser.parse_args()
 	
 		Queue = MasterQue()
-		ssbot = SubspaceBot(False,True,Queue,logging.getLogger("ML.Master.Core"))
+		config = GlobalConfiguration(options.ConfigFile,options.Password)
+		ssbot = SubspaceBot(config.Host,
+								  config.Port, 
+								  config.MasterName, 
+								  config.MasterPassword,
+								  config.MasterArena,
+								  False,
+								  BM_MASTER,
+								  Queue,
+								  logging.getLogger("ML.Master.Core"))
 		ssbot.setBotInfo("Master","MasterBot Manages the starting/stopping of bots", None)
 		BotList = [ ]
-		config = GlobalConfiguration(options.ConfigFile,options.Password)
 		#this adds dir's to pythonpath so we can run the dev code out of seperate dirs
 		for p in config.paths:
 			sys.path.append(p)
@@ -324,6 +341,8 @@ def MasterMain():
 		#loads atleast the masterbot
 		md = ModuleData("Master",module,"None",config.ConfigurationFile,"",logging.getLogger("ML.Master"))
 		master = Bot(ssbot,md,config,Queue)
+		master.setReactor(reactor)
+		
 		BotList.append(master)
 		#load any bots that are specified in the config
 		bot = None
@@ -332,26 +351,12 @@ def MasterMain():
 			if bot:
 				BotList.append (bot)
 			bot = None
-		wait_time = 0
-		while ssbot.shouldReconnect():
-			ssbot.connectToServer(config.Host,
-								  config.Port, 
-								  config.MasterName, 
-								  config.MasterPassword,
-								  config.MasterArena)		   
-			while ssbot.isConnected():
-					wait_time = 0
-					event = ssbot.waitForEvent()
-					for b in BotList:
-						b.HandleEvents(ssbot,event)
-			logger.critical("Master disconnected")
-			if ssbot.shouldReconnect():				
-				ssbot.resetState()
-				wait_time+=60
-				if wait_time > 600: #if wait is over 10 mins reset wait period
-					wait_time = 0
-				time.sleep(wait_time) # wait a little longer if retry fails each time
-				logger.critical("Reconnecting")	
+			
+		ssbot.setBotList(BotList)
+		lp = reactor.listenUDP(0, ssbot)
+		ssbot.setReactorData(reactor,lp) # so clients can disconnect themselves when they get disconnect packet or master kills them
+		reactor.run()	   
+
 		
 	except (KeyboardInterrupt, SystemExit):
 		logger.critical("CTRL-c or System.exit() detected")	
@@ -359,13 +364,10 @@ def MasterMain():
 		logger.critical("Unhandled Exception")
 		LogException(logger)
 	finally:
-		if ssbot.isConnected():
-			ssbot.disconnectFromServer()
-		logger.info( "Master disconnected" )
-		logger.info( "Waiting For Bots to stop")
-		logger.critical("Master shutting down")
-		master.StopAllBots()
-		logger.critical("Requested Stop for all active bots...")
+# 		if 'master' in locals():
+# 			master.StopAllBots()
+		if reactor.running:
+			reactor.stop()
 		for b in BotList:
 			b.Cleanup()
 		logger.critical("Master Bot behaviors cleansed")
@@ -374,7 +376,7 @@ def MasterMain():
 		
 		
 if __name__ == '__main__':
-	profile = True
+	profile = False
 	if profile:
 		import cProfile
 		filename = time.strftime("bot-%a-%d-%b-%Y-%H-%M-%S.profile", time.gmtime())

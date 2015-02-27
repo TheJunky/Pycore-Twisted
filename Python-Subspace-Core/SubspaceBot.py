@@ -1,841 +1,44 @@
-# Copyright (c) 2010 cycad <cycad@zetasquad.com>. All rights reserved.
 
-# todo: bot.disconnect() and clean the interface between core disconnections and higher level disconnections
-#changed import from import 1,2,3 to seperate lines as per python style guide
-import socket
-import sys
-import struct  
-import array
-import os
-import hashlib
-import time
-import types
-import zlib
-import platform
-import traceback
-import SubspaceCoreStack
-from SubspaceCoreStack import GetTickCountHs, TickDiff, CoreStack, PRIORITY_HIGH, PRIORITY_NORMAL
 
-from SubspaceSettings import * 
-from logging import DEBUG,INFO,ERROR,CRITICAL
+from Subspace import *
 
-EVENT_HANDLER_PRE = -1 
-EVENT_HANDLER_MAIN = 0
-EVENT_HANDLER_POST = 1
 
+class SubspaceBot(DatagramProtocol):
 
-
-EVENT_ERROR = 0
-"""
-
-"""
-EVENT_TICK = 1
-"""Occurs every 1/10th of a second.
-
-Sets: type"""
-
-EVENT_DISCONNECT = 2
-"""Occurs when the bot disconnects from the server.
-
-Sets: type"""
-
-EVENT_START = 3
-"""Occurs when the bot logs in to the server.
-
-At this point, commands and messages can be sent with success.  If the bot needs
-to run any commands automatically on login, this is the time to do that.
-
-Sets: type"""
-EVENT_LOGIN = 4
-"""
-occours when bot is added to the playerlist so u can priv it
-
-
-"""
-
-
-EVENT_MESSAGE = 5
-"""Indicates the bot received a message.
-
-message is the text of the message.  message_type indicates what type of message
-was received, and is one of the MESSAGE_TYPE_Xxx constants.
-
-Sets:
-		event.player = player
-		event.message = message
-		event.message_type = message_type
-		event.pname = message_name
-		event.chat_no = chatnum
-		event.alert_name = alert
-		event.alert_arena = arena
-"""
-
-EVENT_ENTER = 6
-"""Indicates a player entered the arena.
-
-player is the player who entered.
-
-A bot will receive an enter event for itself, so to avoid taking action on the
-bot check event.player.pid against bot.pid.
-
-Sets: type, player"""
-
-EVENT_LEAVE = 7
-"""Indicates a player left the arena.
-
-player is the player who left.
-
-Sets: type, player"""
-
-EVENT_CHANGE = 8
-"""Happens when a player changes ship, freq, or both.
-
-player is the player that changed freq.  old_freq is the player's old frequency.
-old_ship is the player's old ship. If {freq,ship} didn't change, old_{ship,freq}
-are equal.
-			event.player
-			event.old_freq = player.freq
-			event.old_ship = player.ship
-			player.ship = new_ship
-			player.freq = new_freq
-
-
-"""
-
-EVENT_COMMAND = 9
-"""A command was used.
-
-player is the player that used the command.
-
-command is the Command object that was used.  arguments are an array, starting
-at the first argument.  arguments_after is an array of an argument and everything
-after it, starting at the first argument. If there are no arguments passed,
-arguments and arguments_after are empty lists.
-
-For example after the command: !command a b c
-   arguments = ['a', 'b', 'c']
-   arguments_after = ['a b c', 'b c', 'c']
-   
-This allows you to match players with spaces in their name such as:
-	!lag C H E E P
-by using arguments_after[0]
-   
-Sets: type, player, command, arguments, arguments_after.
-			event = GameEvent(EVENT_COMMAND)
-			event.player = event.player
-			event.command = command
-			event.arguments = event.arguments
-			event.arguments_after = event.arguments_after
-			event.pname = event.pname
-			event.plvl = event.plvl
-			event.chat_no = event.chat_no
-			event.alert_name = event.alert_name
-			event.alert_arena = event.alert_arena
-			event.command_type = event.command_type
-
-
-"""
-
-EVENT_POSITION_UPDATE = 10
-"""A position update was received for player.
-
-Sets: type, player,fired_weapons,sd_updated
-updates:
-			player.rotation = rotation
-			player.x_pos = x_pos
-			player.y_pos = y_pos
-			player.x_vel = x_vel
-			player.y_vel = y_vel
-			player._setStatus(status)
-			player.Bounty = Bounty
-			player.ping = latency
-			player.last_pos_update_tick = GetTickCountHs()
-
-
-if sd_updated == true then 
-spectator data in the player class is updated
-
-if fired_weapons is true 
-event sets:
-		event.weapons_type == WEAPON_XX
-		event.weapons_level = 0-4
-		event.shrap_level = 0-4?
-		event.shrap = 0 -31
-		event.alternate = 1 for mines if mines/proxMines else bomb/proxbomb
-						  also indicates multifire/singlefire for bullets	  
-
-
-
-"""
-
-EVENT_KILL = 11
-"""A kill event was set.
-
-killer is the player who did the killing, killed is the player who died.
-
-Sets: type, killer, killed, flags_transfered,death_green_id,Bounty"""
-
-EVENT_ARENA_LIST = 12
-"""An arena list was received.  This is usually in response to sending a pub message
-containing '?arena'.
-
-arena_list is a list of (arena_name, num_players,here) tuples.
-
-bot.arena is updated during this event.
-
-Sets: type, arena_list"""
-
-EVENT_TIMER = 13
-"""A timer has expired.
-
-id is the ID of the timer, returned by bot.setTimer(), of the timer that expired.
-user_data is the same user_data passed to bot.setTimer() during the timer's creation.
-
-Timers are only granular to .1 second.
-
-Sets: type, id, user_data"""
-
-EVENT_GOAL = 14
-"""A goal was scored.
-
-freq is the frequency the goal was scored by.
-points is the amount of points rewarded to the freq by scoring a goal.
-
-This event has no associated PID with it.
-
-Sets: type, freq, points"""
-
-EVENT_FLAG_PICKUP = 15
-"""Someone picked up a flag.
-
-player is the player who picked up the flag.
-flag_id is the id for the flag that was picked up.
-
-Sets: type, player, flag_id, old_freq,new_freq,x,y"""
-
-EVENT_FLAG_DROP = 16
-"""Someone dropped a flag.
-
-player is the player who dropped the flag.
-
-Sets: type, player, flag_count"""
-
-EVENT_TURRET = 17
-"""A player attached to another player.
-
-turreter is the player who attached to another player.
-turreted is the player who was attached to.
-old_turreted is a player if the event is a detach else it is None
-
-Sets: type, turreter, turreted,old_turreted"""
-
-EVENT_PERIODIC_REWARD = 18
-"""Freqs are periodically given rewards for the amount of flags they own.
-
-point_list is a list of (freq, points) tuples.
-
-Sets: type, point_list"""
-
-EVENT_BALL = 19
-"""Ball periodically sends update packets to the server. This event records this data.
-
-ball_id is the ID of the ball, x and y_pos hold the x and y coordinates in pixel-coordinates.
-x and y_vel holds the x and y velocity in pixels per 10 seconds.
-time might be the timestamp since last ball update packet? uncertain.
-
-Sets: type, ball_id, x_pos, y_pos, x_vel, y_vel, player, time"""
-
-
-
-
-EVENT_MODULE = 20
-"""Custom module event 
-Sets: type,event_source,event_name,event_data
-this event is so a module can share information with any other module running on the same bot
-example:
-infobot will parse all the information from *info and pass the info class as a module event
-to any other module that is running
-
-"""
-
-EVENT_BROADCAST = 21
-"""Custom module event 
-Sets: type,bsource,bmessage
-this event is used for interbot communication 
-think of it as equivilant to all the bots being on the 
-same chat sending messages to eachother
-"""
-
-EVENT_PRIZE = 22
-"""
-Sets time_stamp,x,y,prize,player
-happens when a player picksup a green
-"""
-EVENT_SCORE_UPDATE = 23
-"""
-Sets type,
-			event.player
-			old values:
-			event.old_flag_points 
-			event.old_kill_points
-			event.old_wins 
-			event.old_losses 
-			new values:
-			player.wins
-			player.flag_points
-			player.kill_points
-			player.losses
-			all the new values will be
-player score will be updated at this time
-"""
-EVENT_SCORE_RESET = 24
-"""
-pid = 0xffff if all players reset
-Sets: type,pid, player player will be None if pid is 0xffff which indicates
-everyone in the arena has been reset to 0
-"""
-EVENT_FLAG_UPDATE = 25
-"""
-sets: type,freq,flag_id,x,y
-this is sent periodicly, it will update the position of dropped flags
-in flag drop the position of the flag wont be known until the next 
-flag update
-"""
-EVENT_FLAG_VICTORY = 26
-"""
-Sets:type,freq,points 
-"""
-EVENT_ARENA_CHANGE = 27
-"""
-Sets type,old_arena
-sent when a bot changes arenas
-"""
-
-EVENT_WATCH_DAMAGE = 28
-"""
-when the bot /*watchdamage's a player the bot will get this event everytime he takes damage
-event sets:
-		event.attacker
-		event.attacked
-		event.energy_old
-		event.energy_lost
-		event.weapons_type == WEAPON_XX
-		event.weapons_level = 1-4
-		event.shrap_level = 1-4?
-		event.shrap = 0 -31
-		event.alternate = 1 for mines if mines/proxMines else bomb/proxbomb 
-"""
-EVENT_BRICK = 29
-"""sets  event.brick_list  where each brick is a brick class"""
-
-EVENT_SPEED_GAME_OVER = 30
-"""
-sets bot_score,bot_rank,winners = [(rank,player,score),...]
-"""
-
-
-
-
-COMMAND_TYPE_PUBLIC = 0x02
-"""A public COMMAND (blue)."""
-COMMAND_TYPE_TEAM = 0x03
-"""A team COMMAND (yellow)."""
-COMMAND_TYPE_FREQ = 0x04
-"""A freq COMMAND (green name, blue text)"""
-COMMAND_TYPE_PRIVATE = 0x05
-"""A private COMMAND (sourced green, in-arena)."""
-COMMAND_TYPE_REMOTE = 0x07
-"""A remote COMMAND (sourced green, out of arena."""
-COMMAND_TYPE_CHAT = 0x09
-"""A chat COMMAND (red)."""
-COMMAND_TYPE_ALERT = 0x0A
-"""Actually a remote message but lets pass it on as an alert"""
-
-#convenience vars for command registration
-COMMAND_LIST_PP = [COMMAND_TYPE_PUBLIC,COMMAND_TYPE_PRIVATE]
-"""private and public COMMAND"""
-COMMAND_LIST_PR = [COMMAND_TYPE_PRIVATE,COMMAND_TYPE_REMOTE]
-"""private and public COMMAND"""
-COMMAND_LIST_PPR = [COMMAND_TYPE_PUBLIC,COMMAND_TYPE_PRIVATE,
-				COMMAND_TYPE_REMOTE]
-"""private and public and remote COMMAND"""
-COMMAND_LIST_PPRC = [COMMAND_TYPE_PUBLIC,COMMAND_TYPE_PRIVATE,
-				COMMAND_TYPE_REMOTE,COMMAND_TYPE_CHAT]
-"""private and public and remote and Chat COMMANDs"""
-COMMAND_LIST_PPC = [COMMAND_TYPE_PUBLIC,COMMAND_TYPE_PRIVATE,
-				COMMAND_TYPE_REMOTE,COMMAND_TYPE_CHAT]
-"""private and public and Chat COMMANDs"""
-COMMAND_LIST_ALL = [COMMAND_TYPE_PUBLIC,COMMAND_TYPE_TEAM,
-				COMMAND_TYPE_FREQ,COMMAND_TYPE_PRIVATE,
-				COMMAND_TYPE_REMOTE,COMMAND_TYPE_CHAT]
-
-
-FREQ_NONE = 0xFFFF
-
-PID_NONE = 0xFFFF
-
-SOUND_NONE = 0
-
-MESSAGE_TYPE_ARENA = 0x00
-MESSAGE_TYPE_SYSTEM = MESSAGE_TYPE_ARENA
-"""An arena message (unsourced green)."""
-MESSAGE_TYPE_PUBLIC_MACRO = 0x01
-"""A public macro message (blue)."""
-MESSAGE_TYPE_PUBLIC = 0x02
-"""A public message (blue)."""
-MESSAGE_TYPE_TEAM = 0x03
-"""A team message (yellow)."""
-MESSAGE_TYPE_FREQ = 0x04
-"""A freq message (green name, blue text)"""
-MESSAGE_TYPE_PRIVATE = 0x05
-"""A private message (sourced green, in-arena)."""
-MESSAGE_TYPE_WARNING = 0x06
-"""A warning message from \*warn."""
-MESSAGE_TYPE_REMOTE = 0x07
-"""A remote message (sourced green, out of arena."""
-MESSAGE_TYPE_SYSOP = 0x08
-"""A sysop message (dark red)."""
-MESSAGE_TYPE_CHAT = 0x09
-"""A chat message (red)."""
-MESSAGE_TYPE_ALERT = 0x0A
-"""Actually a parsed remote message but lets pass it on as an alert"""
-
-
-SHIP_WARBIRD = 0
-SHIP_JAVELIN = 1
-SHIP_SPIDER = 2
-SHIP_LEVIATHAN = 3
-SHIP_TERRIER = 4
-SHIP_WEASEL = 5
-SHIP_LANCASTER = 6
-SHIP_SHARK = 7
-SHIP_SPECTATOR = 8
-SHIP_NONE = SHIP_SPECTATOR
-
-STATUS_STEALTH = 0x01
-STATUS_CLOAK = 0x02
-STATUS_XRADAR = 0x04
-STATUS_ANTIWARP = 0x08
-STATUS_FLASHING = 0x10
-STATUS_SAFEZONE = 0x20
-STATUS_UFO = 0x40
-
-PRIZE_RECHARGE=		    1	 
-PRIZE_ENERGY=			2
-PRIZE_ROTATION=		    3
-PRIZE_STEALTH=			4
-PRIZE_CLOAK=			5
-PRIZE_XRADAR=			6
-PRIZE_WARP=			    7
-PRIZE_GUNS=			    8
-PRIZE_BOMBS=			9
-PRIZE_BOUNCINGBULLETS=  10
-PRIZE_THRUSTER=		    11
-PRIZE_TOPSPEED=		    12
-PRIZE_FULLCHARGE=		13
-PRIZE_ENGINESHUTDOWN=	14
-PRIZE_MULTIFIRE=		15
-PRIZE_PROXIMITY=		16
-PRIZE_SUPER=			17
-PRIZE_SHIELDS=		    18
-PRIZE_SHRAPNEL=		    19
-PRIZE_ANTIWARP=		    20
-PRIZE_REPEL=			21
-PRIZE_BURST=			22
-PRIZE_DECOY=			23
-PRIZE_THOR=			    24
-PRIZE_MULTIPRIZE=		25
-PRIZE_BRICK=			26
-PRIZE_ROCKET=			27
-PRIZE_PORTAL=			28
-
-
-WEAPONS_NULL=		   0
-WEAPONS_BULLET=		   1
-WEAPONS_BOUNCEBULLET=  2
-WEAPONS_BOMB=		   3
-WEAPONS_PROXBOMB=	   4
-WEAPONS_REPEL=		   5
-WEAPONS_DECOY=		   6
-WEAPONS_BURST=		   7
-WEAPONS_THOR=		   8
-
-#misc definitions
-COORD_NONE = 0xFFFF
-PID_NONE = 0xFFFF
-FREQ_NONE = 0xFFFF
-			
-
-class GameEvent:
-	"""Represents an event generated by the core."""
-	
-	type = None
-	"""Is one of EVENT_Xxx."""
-	
-	def __init__(self, type):
-		self.type = type
-		
-class Player:
-	"""A class that represents the a Player.  All values are read-only to bots except
-	for the 'player_info' variable that is reserved for bot's per-player data storage.
-	
-	The x_pos, y_pos, x_vel, y_vel, and status_Xxx are only as recent as the last_pos_update_tick
-	timestamp.  Position updates are only received for players on the bot's radar, except
-	in the case where a player first enters a safe area."""
-		
-	name = None
-	"""The player's name"""
-	
-	squad = None
-	"""The player's squad"""
-	
-	banner = None
-	"""A player's banner"""
-	
-	pid = None
-	"""The player's PID, unique for all players in the arena. Invalid after EVENT_LEAVE."""
-	
-	ship = None
-	"""The player's ship, one of SHIP_Xxx.  Use GetShipName() get the ship's name as a string."""
-
-	freq = None
-	"""The player's current frequency."""
-	
-	x_pos = None
-	"""The player's X coordinate, in pixels.  This is only as recent as 'last_pos_update_tick."""
-	
-	y_pos = None
-	"""The player's Y coordinate, in pixels.  This is only as recent as 'last_pos_update_tick."""
-	
-	x_vel = None
-	"""The player's X velocity.  This is only as recent as 'last_pos_update_tick."""
-	
-	y_vel = None
-	"""The player's Y velocity.  This is only as recent as 'last_pos_update_tick."""
-	
-	bounty = None
-	"""plays Bounty is updated in position updats"""
-	
-	ping = None
-	"""also updated in event pos """
-	
-	last_pos_update_tick = None
-	"""The tickstamp, in hundreths of seconds, of when the player's last position update was received."""
-	
-	player_info = None
-	"""Reserved for a bot implementation's own use.  Should be set during EVENT_ENTER.
-	
-	For example:
-	
-	.. sourcecode:: python
-	
-		class PlayerInfo:
-			def __init__(self):
-				self.kill_count = 0
-				self.death_count = 0
-		
-		Then in EVENT_ENTER:
-			event.player.player_info = PlayerInfo()
-			
-		And in EVENT_KILL:
-			event.killer.player_info.kill_count += 1
-			event.killed.player_info.death_count += 1"""
-		
-	status_stealth = None
-	"""True if the player has stealth on, otherwise False."""
-	
-	status_cloak = None
-	"""True if the player has cloak on, otherwise False."""
-	
-	status_xradar = None
-	"""True if the player has XRadar on, otherwise False."""
-	
-	status_antiwarp = None
-	"""True if the player has AntiWarp on, otherwise False."""
-	
-	status_flashing = None
-	"""I not know what this indicates."""
-	
-	status_safezone = None
-	"""True if the player is in a safe area, otherwise False."""
-	
-	status_ufo = None
-	"""True if the player has UFO toggles, otherwise False."""
-	flag_points =None
-	kill_points =None
-	wins =None
-	losses =None
-	
-	flag_count =None
-	turreted_pid =None
-	#turreter_list =None
-	
-	ping =None
-	bounty =None
-	
-	#if carrying ball else 0xffff
-	ball_id =None
-
-	
-	#spectator data look at sd_time to see when it was last updated
-	sd_energy =None
-	sd_s2c_ping =None
-	sd_timer =None
-	sd_shields =None
-	sd_super =None
-	sd_bursts =None
-	sd_repels =None
-	sd_thors =None
-	sd_bricks =None
-	sd_decoys =None
-	sd_rockets =None
-	sd_portals =None
-	sd_time =None
-	
-	
-	def __init__(self, name, squad, pid, ship, freq):
-		"""Initialize the Player object."""
-		self.name = name
-		self.squad = squad
-		self.pid = pid
-		self.ship = ship
-		self.freq = freq
-		
-
-		self.rotation = 0
-		self.x_pos = -1
-		self.y_pos = -1
-		self.x_vel = 0
-		self.y_vel = 0
-		self.last_pos_update_tick = None
-		self.player_info = None
-		self._setStatus(0x00)
-
-		self.flag_points = 0
-		self.kill_points = 0
-		self.wins = 0
-		self.losses = 0
-		
-		self.flag_count = 0
-		self.turreted_pid = 0xFFFF # pid of the player this  player is turreting
-	
-		
-		self.ping = 0
-		self.bounty = 0
-		
-		#if carrying ball else 0xffff
-		self.ball_id = 0xffff
-
-		
-		#spectator data look at sd_time to see when it was last updated
-		self.sd_energy = 0
-		self.sd_s2c_ping = 0
-		self.sd_timer = 0
-		self.sd_shields = 0
-		self.sd_super = 0
-		self.sd_bursts = 0
-		self.sd_repels = 0
-		self.sd_thors = 0
-		self.sd_bricks =0
-		self.sd_decoys =0
-		self.sd_rockets =0
-		self.sd_portals =0
-		self.sd_time = 0
-		
-	
-	def __str__(self):
-		return self.name
-	
-	def _setStatus(self, status_flags):
-		"""Updates the player's status with the status flags received in the position update packet."""
-		self.status_stealth = status_flags & STATUS_STEALTH != 0
-		self.status_cloak = status_flags & STATUS_CLOAK != 0
-		self.status_xradar = status_flags & STATUS_XRADAR != 0
-		self.status_antiwarp = status_flags & STATUS_ANTIWARP != 0
-		self.status_flashing = status_flags & STATUS_FLASHING != 0
-		self.status_safezone = status_flags & STATUS_SAFEZONE != 0
-		self.status_ufo = status_flags & STATUS_UFO != 0
-
-
-class Command():
-
-	def __init__(self,id,name,alias,access_level,msg_types_list,category,args,help_short,help_long=None):
-		self.id = id
-		self.name= name
-		self.alias= alias
-		self.access_level= access_level
-		self.msg_types = 0
-		self.msg_types = msg_types_list
-		self.category= category
-		self.args= args
-		self.help_short = help_short
-		self.help_long= help_long
-	def IsAllowed(self,ss_msg_type):
-		if ss_msg_type in self.msg_types:
-			return True
-		else:
-			return False
-
-		
-class ModuleInfo():
-	def __init__(self,filename,name,author,description,version):
-		self.filename=filename
-		self.name=name
-		self.author=author
-		self.description=description
-		self.version = version
-
-class Timer:
-	"""Represents a timer created with setTimer in the core."""
-	
-	id = None
-	"""The ID of the timer."""
-	
-	duration = None
-	"""The the duration of the timer."""
-	
-	user_data = None
-	"""The user_data value passed in to the setTimer() call when the timer was created."""
-	
-	base = None
-	"""The tickstamp when the timer was created."""
-	
-	def __init__(self, id, seconds, user_data=None):
-		self.id = id
-		self.duration = seconds * 100 # to ticks
-		self.user_data = user_data
-		self.base = GetTickCountHs()
-
-def GetShipName(ship):
-	"""Get the name of a ship from a SHIP_Xxx constant."""
-	if ship == SHIP_WARBIRD:
-		return 'Warbird'
-	elif ship == SHIP_JAVELIN:
-		return 'Javelin'
-	elif ship == SHIP_SPIDER:
-		return 'Spider'
-	elif ship == SHIP_LEVIATHAN:
-		return 'Leviathan'
-	elif ship == SHIP_TERRIER:
-		return 'Terrier'
-	elif ship == SHIP_WEASEL:
-		return 'Weasel'
-	elif ship == SHIP_LANCASTER:
-		return 'Lancaster'
-	elif ship == SHIP_SHARK:
-		return 'Shark'
-	elif ship == SHIP_SPECTATOR:
-		return 'Spectator'
-	else:
-		return 'Unknown'
-
-
-MAX_FLAGS = 256
-
-class Flag():
-	def __init__(self,id,pid=0xFFFF,freq=0xFFFF,x=0xFFFF,y=0xFFFF):
-		self.id=id
-		#self.pid = pid
-		self.freq=freq #if == FREQ_NONE flag neuted
-		self.x=x #if == coord_none  flag is carried
-		self.y=y #if == coord_none  flag is carried
-
-MAX_BALLS = 8
-
-class Ball():
-	def __init__(self,id,pid=0xFFFF,x=0xFFFF,y=0xFFFF):
-		self.id=id
-		self.pid=pid
-		self.x=x
-		self.y=y
-		self.time = 0
-
-class Brick():
-	def __init__(self,x1,y1,x2,y2,freq,id,timestamp):
-		self.x1= x1
-		self.y1= y1
-		self.x2= x2
-		self.y2= y2
-		self.freq= freq
-		self.id= id
-		self.timestamp = timestamp
-				
-class Oplist:
-	def __init__(self,filename='Ops.ini'):
-		self.__ops_dict = {}
-		self.__filename = filename
-		self.Read()
-	def __isValidLevel(self,lvl):
-		if lvl >0 and lvl <= 9:
-			return True
-		else:
-			return False	 
-
-	def GetAccessLevel(self, name):
-		n = name.lower()
-		if n in self.__ops_dict:
-			return self.__ops_dict[n]
-		else:
-			return 0
-	def AddOp(self,lvl,name):
-		n = name.lower()
-		if self.__isValidLevel(lvl):
-			self.__ops_dict[n] = lvl
-			self.Write()
-			return True
-		else:
-			return False
-
-	def DelOp(self,name):
-		n = name.lower()
-		if n in self.__ops_dict:
-			del self.__ops_dict[n]
-			self.Write()
-			return True
-		else:
-			return False;
-	def ListOps(self,ssbot,event):
-		c = 0
-		for name,lvl in self.__ops_dict.iteritems():
-			if(event.plvl >= lvl):
-				ssbot.sendReply(event,"OP:%25s:%i" %(name,lvl))
-			c+=1
-		if c == 0:
-			ssbot.sendReply(event,"No Ops")
-		pass
-	def Read(self):		
-#		self.__ops_dict = dict(((line[2:].strip().lower(),int(line[0])) for line in open(self.__filename,'r') if line.strip() != ""))
-		lines = open(self.__filename,'r')
-		pline = ((line[2:].strip().lower(),int(line[0])) for line in lines if line.strip() != "")
-		self.__ops_dict = dict(pline)
-
-	def Write(self):
-		file = open (self.__filename, 'w' )
-		for name,lvl in self.__ops_dict.iteritems():
-			file.write(str(lvl)+":"+name+"\n")
-			
-			
-class SubspaceBot(SubspaceCoreStack.CoreStack):
-	"""The bot. Must be connected with connectToServer() and then waitForEvent()
-	must be called frequently for adequate performance.
-	
-	The typical bot's mainloop looks like:
-	
-	.. sourcecode:: python
-	
-		while bot.isConnected():
-			event = bot.waitForEvent():
-			if event.type = ...:
-				...
-			elif event.type = ...:
-				...
-	"""
-	def __init__(self, debug=False, isMaster=False, MQueue=None, logger = None):
+	def __init__(self, host, port, username, password, arena, debug=False, botmode=BM_STANDALONE, MQueue=None, logger = None):
 		"""Initialize the CoreStack class. If debug is set debugging messages will be displayed."""
-		CoreStack.__init__(self, debug, logger)
-		self.__core_about = "Python-SubspaceBot By cycad <cycad@zetasquad.com>"
-		self.__core_version = "0.002d"
 		self.__debug = debug
+		self.logger = logger
+		
+		
+		self.__username = username
+		self.__password = password
+		self.__host = host
+		self.__port = port
+		self.arena = arena
+		
+		self.__state= None
+		self.__crypto = None # initialized after servers key is received. once set, encryption is done
+		self.__packet_queues = [[], []]	# list containing QueuedPacket objects
+		self.__reliable_messages_in_transit = { } # ackid : [packet, last transmit tick]   a list is used because it needs to be assigned (updating tick count) while the dictionary has an open iterator
+		self.__incoming_reliable_packets = [] # (ack_id, packet) reliable messages that were received out of order, packet does not include the reliable header
+
+		
+		self.__last_packet_received_tick = GetTickCountHs()
+		
+		# the list of incoming chunk data that gets concatenated and then handled
+		self.__chunk_list = None
+		self.__huge_chunk_data = None
+		
+
+		self.__core_about = "Python-SubspaceBot By cycad <cycad@zetasquad.com>"
+		self.__core_version = "0.0001-Twisted"
+
+		
+
+		self.__botlist= None
+		
+		
 		self.__players_by_pid = {} # pid : Player
 		self.__players_by_name = {} # name: Player
 		
@@ -866,7 +69,11 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		
 		self.__connected = False
 		
-		self.arena = ""
+		#will be true unl;ess disconnectfrom server was called by bot/master
+		self.__reconnect = True
+		self.__last_recconect_attempt = None
+		self.__total_reconnect_attempts = None
+		
 		
 		#added by junky	
 		self.__cmd_dict = {}
@@ -901,16 +108,17 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		#for broadcasts it goes to master master distributes
 		self.__mqueue = MQueue
 
-			
-		if(isMaster):
-			self.__isMaster = True;
-			self.__command_die_id = self.registerCommand('!stopmaster',None,7,COMMAND_LIST_PR,"Core","","stop the master")
+		self.__botmode = botmode;	
+		if(botmode in [BM_MASTER,BM_STANDALONE]):
+			if botmode == BM_STANDALONE:
+				self.__command_die_id = self.registerCommand('!stopbot',"!die",7,COMMAND_LIST_PR,"Core","","stop the master")
+			else:
+				self.__command_die_id = None #need to handle it in the master code
 			self.__command_addop_id = self.registerCommand('!Addop',"!ao",4,COMMAND_LIST_ALL,"Core","[lvl:name]","add a player to the oplist")
 			self.__command_delop_id = self.registerCommand('!Delop',"!do",4,COMMAND_LIST_ALL,"Core","[name]","delete a player from the oplist")
 			self.__command_listops_id = self.registerCommand('!Listops',"!lo",4,COMMAND_LIST_PP,"Core","","list all the ops <= to your lvl")
 			self.__command_reloadops_id = self.registerCommand('!Reloadops',"!ro",4,COMMAND_LIST_ALL,"Core","","reread oplist from file")
-		else:
-			self.__isMaster = False
+		elif botmode==BM_SLAVE:
 			self.__command_die_id = self.registerCommand('!stopbot',"!die",2,COMMAND_LIST_ALL,"Core","","stop this bot")
 			self.__command_addop_id = None
 			self.__command_delop_id = None
@@ -937,7 +145,24 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			EVENT_LEAVE : self.__neutFlagsCarriedByPlayerProccessor,
 			EVENT_FLAG_PICKUP : self.__eventFlagPickupPostprocessor,
 			EVENT_FLAG_DROP : self.__eventFlagDropPostprocessor,
-			EVENT_KILL : self.__eventKillPostprocessor
+			EVENT_KILL : self.__eventKillPostprocessor,
+			EVENT_DISCONNECT: self.__eventDisconnectPostprocessor
+		}
+		
+		
+		
+		# the packet handler functions
+		self.__core_packet_handlers = {
+			0x03 : self.__handleReliableMessage,
+			0x04 : self.__handleAckPacket,
+			0x05 : self.__handleSyncRequestPacket,
+			0x06 : self.__handleSyncResponsePacket,
+			0x07 : self.__handleDisconnectPacket,
+			0x08 : self.__handleChunk,
+			0x09 : self.__handleChunkEnd,
+			0x0A : self.__handleHugeChunk,
+			#0x0D : self.__handleDisconnectPacket,	#xxx we could parse the reason out of this
+			0x0E : self.__handleClusterPacket,
 		}
 		
 		# setup the appropriate handlers
@@ -1018,6 +243,450 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		
 		self.settings = None
 		
+		self.lc = task.LoopingCall(self.Tick)
+		self.lc.start(0.01,False)
+		
+		
+		self.__reactor= None
+		self.__listeningport=None
+
+	def createPeriodicCallBack(self,func,secs,now):#broken
+		lc = task.LoopingCall(func)
+		lc.start(secs,now)
+		
+	def setReactorData(self,reactor,listeningport):
+		self.__reactor = reactor
+		self.__listeningport = listeningport
+		
+	def loseConnection(self):
+		if self.__botmode in [BM_STANDALONE,BM_MASTER]:
+			self.stopReactor()
+		else:
+			self.__log(CRITICAL,self.name +" losing connection")
+			self.transport.loseConnection()
+			#self.transport.disconnect()
+			#self.__listeningport.connectionLost()
+			
+	def stopReactor(self):
+		self.__reactor.disconnectAll()
+		self.__log(CRITICAL, "stopping reactor")
+		self.__reactor.stop()
+			
+			
+	def setBotList(self,botlist):
+		self.__botlist= botlist
+		
+	def startProtocol(self):
+		self.connectToServer()
+		
+	def datagramReceived(self, data, (host, port)):
+		
+		self.__last_packet_received_tick = GetTickCountHs()
+		
+		if self.__state == STATE_CONNECTED:
+			self.__total_packets_received += 1
+			# decrypt the packet
+			if self.__crypto:
+				type, = struct.unpack_from("<B", data)
+				begin_offset = 1
+				if type == 0x00:
+					begin_offset = 2
+				data = data[:begin_offset] + self.__crypto.decryptData(data[begin_offset:])
+			self.__processIncomingPacket(data)
+		else:
+			try:
+				game_type, core_type = struct.unpack_from("<BB", data)
+				if game_type == 0x00:
+					if core_type == 0x05:	# response to __sendClientKey()
+						if self.__debug == True:
+							self.__log(INFO,"sending response to server challenge")
+						self.__server_challenge, = struct.unpack_from("<i", data, 2)
+						self.__state = STATE_CHALLENGE_RECEIVED
+						packet = struct.pack("<BBII", 0x00, 0x06, self.__server_challenge & 0xFFFFFFFF, GetTickCountHs())
+						self.__sendRawPacket(packet)
+					elif core_type == 0x02:
+						# success
+						self.__server_key, = struct.unpack_from("<i", data, 2)
+						self.__crypto = SubspaceEncryption.SubspaceEncryption(self.__client_key, self.__server_key)
+						self.__state = STATE_CONNECTED
+						if self.__debug == True:
+							self.__log(INFO,"We got crypto, state connected")
+						self.__queueLoginPacket(self.__username, self.__password)
+						self.flushOutboundQueues()
+						self.__connected = True
+						self.__last_pos_update_sent_tick = GetTickCountHs()	
+					
+			except struct.error:
+				pass
+				
+			# write sent packets to the network
+			self.flushOutboundQueues()	
+		
+	def Tick(self):
+		if self.__connected:
+			self.__addPendingEvent(GameEvent(EVENT_TICK))
+			self.__corePeriodicEvent()
+			self.flushOutboundQueues()
+			self.ProcessEventQueue()
+	
+
+	
+	# Possibly invoked if there is no server listening on the
+	# address to which we are sending.
+	def connectionRefused(self):
+		self.__log(CRITICAL,"Unable to connect to server")
+		self.__connected = False
+		self.loseConnection()
+	
+	
+		
+	def __log(self,level,message):
+		if self.logger:
+			self.logger.log(level,message)
+		else:
+			print (message)
+	
+		
+
+			
+		
+	def connectToServer(self):
+		"""Connect to the server, otherwise raise an exception."""
+
+		self.__total_packets_sent = 0
+		self.__total_packets_received = 0
+		self.__next_outgoing_ack_id = 0
+		self.__next_incoming_ack_id = 0
+		self.__last_sync_response_received_tick = GetTickCountHs()
+		
+
+
+		self.transport.connect(self.__host, self.__port)
+			
+
+		
+		self.__client_key = (-random.randrange(1, sys.maxint))
+		self.__server_challenge = 0
+		
+		
+		self.fc = FileChecksum()
+		self.fc.generateChecksumArray(0)
+		
+		self.__state = STATE_NONE
+		self.__sendRawPacket(struct.pack("<BBIH", 0x00, 0x01, self.__client_key & 0xFFFFFFFF, 0x0001))
+		
+		self._queueSyncRequest()
+		self.flushOutboundQueues()
+	
+		
+	def queuePacket(self, data, reliable=False, priority=PRIORITY_NORMAL):
+		"""Queue a packet to be sent."""
+		size = len(data)
+		psize = size + (6 if reliable else 0)
+		if psize < MAX_PACKET:
+			self.__packet_queues[priority].append(QueuedPacket(data, reliable))
+		else:
+			if size < (MAX_PACKET*100):
+				print "small chunk total size:" + str(size)
+				#print "chunk total size:" + str(len(data))
+				MAX_CHUNK = MAX_PACKET - 8# 6 for reliable header + 2 for packet header
+				while(len(data)> 0):
+					chunk_size = min(MAX_CHUNK,len(data))
+					remaining = len(data)- chunk_size
+					if remaining >0:
+						packet = struct.pack("<BB",0x00,0x08)
+						#print "Headpacket_size: %d Remaining Data:%d" % (chunk_size, remaining)  
+					else:
+						packet = struct.pack("<BB",0x00,0x09) 
+						#print "Tailpacket_size: %d Remaining Data:%d" % (chunk_size, remaining) 
+					packet += data[0:chunk_size-1]
+					data = data[chunk_size:]
+					self.__packet_queues[priority].append(QueuedPacket(packet, True))	
+			else:
+				#dont think this works when i putfile it seems to fail if it gets so big as to use huge chunk
+					offset =0 
+					print "huge chunk total size:" + str(size)
+					MAX_CHUNK = MAX_PACKET - 12# 6 for reliable header + 6 for packet header
+					
+					while(len(data)> 0):
+						chunk_size = min(MAX_CHUNK,len(data))
+						packet = struct.pack("<BBI",0x00,0x0a,size) 
+						packet += data[0:chunk_size-1]
+						data = data[chunk_size:]
+						print "packet_size: %d Remaining Data:%d" % (chunk_size, len(data))
+						self.__packet_queues[priority].append(QueuedPacket(packet, True)) 
+	
+	def __generateNextOutboundPacket(self):
+		"""Extract packets from queues and return a buffer containing the next outbound packet
+		that is to be sent on the network, if a packet can be built.
+		"""
+		h = self.__packet_queues[PRIORITY_HIGH]
+		n = self.__packet_queues[PRIORITY_NORMAL]
+		
+		if len(h) == 0 and len(n) == 0:
+			return None
+				
+		# determine which packets can be clustered, if any
+		clusterable_packets = 0
+		try:
+			for packet_list in [h, n]:
+				for outgoing_packet in packet_list:
+					if outgoing_packet.totalPacketSize() > 255:
+						raise StopIteration()
+					clusterable_packets += 1
+		except StopIteration:
+			pass
+		
+		data = None
+		if clusterable_packets > 1:
+			data = struct.pack("<BB", 0x00, 0x0E)
+			
+			reliable_allowed = True
+			for packet_list in [h, n]:
+				i = 0
+				for p in packet_list[:]:
+					if p.totalPacketSize() <= 255 and len(data) + p.totalPacketSize() + 1 <= MAX_PACKET: #plus 1 is for the data length in cluster
+						if p.reliable:
+							#send reliable packet, can be disallowed due to ordering concerns
+							if reliable_allowed:
+								packet = struct.pack("<BBBI", p.totalPacketSize(), 0x00, 0x03, self.__next_outgoing_ack_id & 0xFFFFFFFF) + p.data
+								
+								# store off packet[1:] here so when its retransmitted, it doesnt re-append the 'size' field
+								# since only the data should be resent
+								self.__reliable_messages_in_transit[self.__next_outgoing_ack_id] = [packet[1:], GetTickCountHs()]
+								self.__next_outgoing_ack_id += 1
+								data += packet
+								
+								packet_list[i] = None
+						else:
+							# send an unreliable packet
+							data += struct.pack('<B', p.totalPacketSize()) + p.data
+							packet_list[i] = None
+					elif p.reliable:
+						# this packet wont fit and it is reliable, so dont allow following
+						# reliable packets to be sent, because these need to be sent in order
+						reliable_allowed = False
+					i += 1
+			
+			# remove None entries
+			# opt: should these be   self.__packet_queues[PRIORITY_Xxx][:] = ...   ?
+			self.__packet_queues[PRIORITY_HIGH] = [x for x in h if x is not None]
+			self.__packet_queues[PRIORITY_NORMAL] = [x for x in n if x is not None]
+			
+		else:
+			# a single, non-cluster packet is being sent
+			if len(h): p = h.pop(0)
+			else: p = n.pop(0)
+				
+			data = p.data
+			
+			if p.reliable:
+				# send packet with the reliable header prepended
+				data = struct.pack("<BBI", 0x00, 0x03, self.__next_outgoing_ack_id & 0xFFFFFFFF) + data
+				self.__reliable_messages_in_transit[self.__next_outgoing_ack_id] = [data, GetTickCountHs()]
+				self.__next_outgoing_ack_id += 1
+		
+		return data
+	
+	def flushOutboundQueues(self):
+		"""Flush outbound packet queues."""
+		while 1:
+			if len(self.__packet_queues[PRIORITY_HIGH]) == 0 and len(self.__packet_queues[PRIORITY_NORMAL]) == 0:
+				break
+			# check to make sure outbound socket is writable
+			packet = self.__generateNextOutboundPacket()
+			if packet:
+				self.__sendRawPacket(packet)
+				
+				
+	def __queueAckPacket(self, ack_id):
+		"""Queue an ack packet."""
+		self.queuePacket(struct.pack("<BBI", 0x00, 0x04, ack_id & 0xFFFFFFFF))
+	
+	def __queueDisconnectPacket(self):
+		"""Queue a disconnect packet."""
+		self.queuePacket(struct.pack("<BB", 0x00, 0x07))
+	
+	def disconnectFromServer(self):
+		"""Disconnect from the server."""
+		self.__reconnect = False
+		self.__queueDisconnectPacket()
+		self.__addPendingEvent(GameEvent(EVENT_DISCONNECT))
+		self.flushOutboundQueues()
+		self.__log(CRITICAL,"disconnected")
+		self.loseConnection()
+	
+	def shouldReconnect(self):
+		return self.__reconnect
+		
+	def __handleReliableMessage(self, packet):
+		"""Handle an incoming reliable message."""
+		# this could be cleaner by adding to the incoming list, then processing lists
+		zero, core_type, ack_id = struct.unpack_from("<BBI", packet)
+		
+		self.__queueAckPacket(ack_id)
+		
+		if ack_id == self.__next_incoming_ack_id:
+			self.__next_incoming_ack_id += 1
+			self.__processIncomingPacket(packet[6:])
+			#self.__log(DEBUG,"ackid = next incoming ackid processing reliabhle message:expected: "+str(self.__next_incoming_ack_id)+" recieved:"+str(ack_id))
+			
+			loop_again = True
+			while loop_again:
+				loop_again = False
+				index = 0
+				for ack_packet_tuple in self.__incoming_reliable_packets:
+					if ack_packet_tuple[0] == self.__next_incoming_ack_id:
+						self.__incoming_reliable_packets.pop(index)
+						self.__next_incoming_ack_id += 1
+						self.__processIncomingPacket(ack_packet_tuple[1])
+						#self.__log(DEBUG,"ackid = in incoming ack list processing reliabhle message:expected: "+str(self.__next_incoming_ack_id)+" recieved:"+str(ack_id))
+						loop_again = True
+						break
+					index += 1
+			
+		elif ack_id > self.__next_incoming_ack_id:
+			self.__incoming_reliable_packets.append((ack_id, packet[6:]))
+			#self.__log(DEBUG,"ackid = > received acks appending to list expected: "+str(self.__next_incoming_ack_id)+" recieved:"+str(ack_id))
+	
+	def __handleChunk(self, packet):
+		if self.__chunk_list is None:
+			self.__chunk_list = []
+			#print "small chunk type: " + packet.encode('hex')
+		self.__chunk_list.append(packet[2:])
+	
+	def __handleChunkEnd(self, packet):
+		if self.__chunk_list:
+			self.__chunk_list.append(packet[2:])
+			self.__processIncomingPacket(''.join(self.__chunk_list))
+			self.__chunk_list = None
+	
+	#added by junky
+	def __handleHugeChunk(self,packet):
+		type,type2, total_size = struct.unpack_from("<BBI",packet)
+		if(self.__huge_chunk_data == None): #new chunk
+			self.__huge_chunk_data = packet[6:]
+			print "huge chunk type: " + self.__huge_chunk_data.encode('hex')
+		else:
+			self.__huge_chunk_data += packet[6:] 
+			
+		if( len(self.__huge_chunk_data) == total_size): #packet complete
+			self.__processIncomingPacket(self.__huge_chunk_data[:])
+			self.__huge_chunk_data = None
+
+
+
+			
+	def __corePeriodicEvent(self):
+		"""This is called every 100ms"""
+		# requeue reliable messages that havent been acked
+		now = GetTickCountHs()
+		for ack_id, packet_last_transmit_tick_list in self.__reliable_messages_in_transit.iteritems():
+			if TickDiff(now, packet_last_transmit_tick_list[1]) > RELIABLE_RETRANSMIT_INTERVAL:
+				self.queuePacket(packet_last_transmit_tick_list[0], False, PRIORITY_HIGH)
+				packet_last_transmit_tick_list[1] = now
+		
+		if TickDiff(now, self.__last_packet_received_tick) >= NO_PACKET_RECEIVED_TIMEOUT_INTERVAL:
+			self.__addPendingEvent(GameEvent(EVENT_DISCONNECT))
+			self.logger.critical("packet not recieved in timeout interval,sending disconnect")
+	
+	def __handleClusterPacket(self, packet):
+		packet = packet[2:]
+		while len(packet):
+			data_len, = struct.unpack_from("<B", packet)
+			self.__processIncomingPacket(packet[1:data_len + 1])
+			packet = packet[data_len + 1:]
+	
+	def __handleDisconnectPacket(self, packet):
+		self.__addPendingEvent(GameEvent(EVENT_DISCONNECT))
+	
+	def __handleSyncRequestPacket(self, packet):
+		self.__queueSyncResponse()
+	
+	def __handleSyncResponsePacket(self, packet):
+		self.__last_sync_response_received_tick = GetTickCountHs()
+		
+	def __handleAckPacket(self, packet):
+		zero, type, ack_id = struct.unpack_from("<BBI", packet)
+		self.__reliable_messages_in_transit.pop(ack_id, None)
+	
+	
+		
+	def __processIncomingPacket(self, packet):
+		# process the incoming packet, etc
+		try:
+			type, = struct.unpack_from("<B", packet)
+			if type == 0x00:
+				# core packet handlers
+				type, = struct.unpack_from("<B", packet, 1)
+				if (self.__debug and type !=0x03):
+					self.__log(DEBUG, "Handling Core Type: 0x%02X" % type)
+					
+				handler = self.__core_packet_handlers.get(type, None)
+				if handler:
+					handler(packet)
+				else:
+					self.__log(INFO,"wtf corestack type %i not handled"%(type,))
+			else:
+				if self.__debug and type != 0x03:
+					self.__log(DEBUG, "Handling Game Type: 0x%02X" % type)
+
+				game_type, = struct.unpack_from("<B", packet)
+				handler = self.__packet_handlers.get(game_type, None)
+				if handler:
+					handler(packet)
+					if (self.__debug and game_type != 0x03):	
+						self.__log(DEBUG, "Handler for Type: 0x%02X is %s" % (game_type,handler))
+				else:
+					if self.__debug == True:
+						self.__log(DEBUG, "Handler for Type: 0x%02X is %s" % (game_type,"No Handler"))	
+						self.__log(DEBUG, "Packet data: " + packet.encode('hex'))	
+						
+				if self.__last_event_generated is not None:
+					postprocessor = self.__event_postprocessors.get(self.__last_event_generated.type, None)
+					if postprocessor:
+						postprocessor(self.__last_event_generated)
+					self.__last_event_generated = None
+					
+				if self.__connected is False:
+					return None
+		except (IndexError, struct.error):
+			if game_type:
+				self.__log(CRITICAL, 'Structure error in SubspaceBot packet handler: %02X' % game_type)
+			else:
+				self.__log(CRITICAL, "Error in Core packet processing")
+			self.__log(CRITICAL, "Packet data: " + packet.encode('hex'))
+			formatted_lines = traceback.format_exc().splitlines()
+			for l in formatted_lines:
+				self.__log(DEBUG,l)			
+
+	
+	def _queueSyncRequest(self):
+		self.queuePacket(struct.pack("<BBIII", 0x00, 0x05, GetTickCountHs(), self.__total_packets_sent & 0xFFFFFFFF, self.__total_packets_received & 0xFFFFFFFF), priority=PRIORITY_HIGH)
+	
+	def __queueSyncResponse(self):
+		self.queuePacket(struct.pack("<BBII", 0x00, 0x06, GetTickCountHs(), TickDiff(GetTickCountHs(), self.__last_sync_response_received_tick)), priority=PRIORITY_HIGH)
+	
+	#def __handleSyncResponsePacket(self, packet):
+	#	# packet contents are irrelevant
+	#	self.__last_sync_response_received_tick = GetTickCountHs()
+	
+	def __queueAckMessage(self, ack_id):
+		self.queuePacket(struct.pack("<BBI", 0x00, 0x03, ack_id & 0xFFFFFFFF), priority=PRIORITY_HIGH)
+	
+	def __sendRawPacket(self, packet):
+		if self.__debug == True:
+			self.__log(DEBUG, "Sent:" + packet.encode('hex'))
+			
+		if self.__crypto:
+			begin_offset = 1
+			if ord(packet[0]) == 0x00:
+				begin_offset = 2
+			
+			packet = packet[:begin_offset] + self.__crypto.encryptData(packet[begin_offset:])
+			
+		self.transport.write(packet)
+		self.__total_packets_sent += 1
 
 	def setDownloadLevelFiles(self,doit):	
 		"""
@@ -1163,22 +832,6 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 		mid[3] = (mid[3] % 24) + 7
 		return struct.unpack_from('<I', mid.tostring())[0]
 	
-	def connectToServer(self, hostname, port, username, password, arena='#master',new_connection=True):
-		"""Connect to a server using the Subspace protocol.
-		
-		hostname and port specify the hostname/IP address and port of the server to connect to.  username is
-		the user to connect as.  password is the combined password and SMod+ password
-		seperated by an asterisk.  For example, 'bot_password*smod_password'. Arena
-		is the name of the arena to join upon entering the zone."""
-		CoreStack.connectToServer(self, hostname, port)
-		self._queueSyncRequest()
-		self.flushOutboundQueues()
-		self.__queueLoginPacket(username, password)
-		self.flushOutboundQueues()
-		self.arena = arena
-		self.__connected = True
-		self.__last_pos_update_sent_tick = GetTickCountHs()
-		
 		
 	def __queueLoginPacket(self, username, password):
 		self.queuePacket(struct.pack("<BB32s32sIBhHhIIIIII", 0x09, 0, username, password, self.machine_id, 0, 0, 0x6f9d, 0x86, 444, 555, self.permission_id, 0, 0, 0))
@@ -1720,7 +1373,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	
 	def __handleLoginResponsePacket(self, packet):
 		login_response, = struct.unpack_from("<B", packet, 1)
-		#print self.__login_response[login_response]
+		self.__log(DEBUG,self.__login_response[login_response])
 		if login_response == 0x01:
 			self.__sendRegistrationForm()#doesnt work
 			self.__log(INFO, "Sending Registration Form")
@@ -1830,7 +1483,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			if player:
 				message_name = player.name
 			else:
-				self.__log(DEBUG, "WTF:MESSAGE mtype%i pid 0x%x:%s",(message_type,pid,message))
+				self.__log(DEBUG, "WTF:MESSAGE mtype%i pid 0x%x:%s"%(message_type,pid,message))
 				message_name = ""
 
 		
@@ -1876,12 +1529,10 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	
 	def __handleCommandDie(self, event):
 		self.sendReply(event, "Ok")
-		if(self.__isMaster):
-			self.__log(CRITICAL,"MasterBot shutdown by %s" % (event.pname,))
-		else:
-			self.__log(INFO,"%s stopped by %s" % (self.name,event.pname))
-			
+		self.__log(INFO,"%s stopped by %s" % (self.name,event.pname))
 		self.disconnectFromServer()
+			
+		
 
 	def __handleCommandAbout(self, event):
 		self.sendReply(event,"Interpreter:" + platform.python_implementation()+" version:"+platform.python_version())
@@ -2048,6 +1699,7 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			for c in self.__chats:
 				cstr += c +","
 			self.sendPublicMessage(cstr,0)
+			self.logger.info(cstr)
 			self.__chats_changed = False
 			
 		return event
@@ -2104,13 +1756,13 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 			new_event.alert_arena = event.alert_arena
 			new_event.command_type = event.command_type
 
-			if command.id == self.__command_die_id:
+			if self.__botmode != BM_MASTER and command.id == self.__command_die_id:
 				self.__handleCommandDie(new_event)
 			elif command.id == self.__command_help_id:
 				self.__handleCommandHelp(new_event)
 			elif command.id == self.__command_about_id:
 				self.__handleCommandAbout(new_event)
-			elif self.__isMaster:
+			elif self.__botmode in [BM_MASTER,BM_STANDALONE]:
 				if command.id == self.__command_addop_id :
 					self.__handleCommandAddop(new_event)
 				elif command.id == self.__command_delop_id :
@@ -2463,6 +2115,12 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 	
 	def __eventKillPostprocessor(self,event):
 		pass
+	
+	def __eventDisconnectPostprocessor(self,event):
+			#self.__log(CRITICAL,"disc postprocessor")
+			#self.loseConnection()
+			return event
+	
 				
 	def __handleArenaListPacket(self, packet):
 		"""'arenaname\x00\xFF\xFF'"""
@@ -2598,83 +2256,28 @@ class SubspaceBot(SubspaceCoreStack.CoreStack):
 							
 		self.queuePacket(packet,True,PRIORITY_HIGH)
 	
-	def resetState(self):
-		if self.__connected:
-			raise Exception("wtf you cant reset state while connected you fag")
-		else:
-			CoreStack.resetState(self)
-			self.__players_by_pid = {} # pid : Player
-			self.__players_by_name = {} # name: Player
-			
-			self.__event_list = []		
-			self.players_here = []
-			self.__players_by_name = {}
-			self.__players_by_pid = {}
-				
-			self.__last_event_generated = None		
-			self.__timer_list = [] # Timer()
-			self.__next_timer_id = 0
-			self.__last_timer_expire_tick = GetTickCountHs()
-			
 			
 	
-	def waitForEvent(self):
-		"""Wait for an event.
-		
-		A GameEvent class instance is returned, and its type can be found in GameEvent.type.
-		The type will be one of EVENT_Xxx.  If the bot is disconnected None will be returned."""
-		
-		#give the core the chance to post process the last event generated
-		if self.__last_event_generated is not None:
-			postprocessor = self.__event_postprocessors.get(self.__last_event_generated.type, None)
-			if postprocessor:
-				postprocessor(self.__last_event_generated)
-			self.__last_event_generated = None
-			
-		if self.__connected is False:
-			return None
-		
+	def ProcessEventQueue(self):
 		#xxx make sure large event lists dont starve the core, and i/o should probably be done between events...
-		while True:
-			if len(self.__event_list) > 0:
-				# give the core the chance to preprocess events, this is needed
-				# because if the changes were made immediately when the event was received (as opposed to when the packet is removed from queue for processing)
-				# the core's view of the game state might be incorrect
-				event =  self.__event_list.pop(0)
-				preprocessor = self.__event_preprocessors.get(event.type, None)
-				if preprocessor:
-					event = preprocessor(event)
-				if event is None: continue
-				self.__last_event_generated = event
-				return event
-				
-			# there are no more bot-level events to process, so call the core's
-			# own wait for event handler
-			event = CoreStack.waitForEvent(self)
-			if event.type == SubspaceCoreStack.EVENT_GAME_PACKET_RECEIVED:
-				try:
-					game_type, = struct.unpack_from("<B", event.packet)
-					handler = self.__packet_handlers.get(game_type, None)
-					if handler:
-						handler(event.packet)
-						if self.__debug:
-							self.__log(DEBUG, "Handler for Type: 0x%02X is %s" % (game_type,handler))
-						
-				except (IndexError, struct.error):
-					if game_type:
-						self.__log(CRITICAL, 'Structure error in SubspaceBot packet handler: %02X' % game_type)
-						self.__log(CRITICAL, event.packet.encode('hex'))
-						self.__log(CRITICAL,sys.exc_info())
-						formatted_lines = traceback.format_exc().splitlines()
-						for l in formatted_lines:
-							self.__log(CRITICAL,l)
-						
-			# map core stack events to game stack events
-			elif event.type == SubspaceCoreStack.EVENT_TICK:
-				self.__addPendingEvent(GameEvent(EVENT_TICK))
-			elif event.type == SubspaceCoreStack.EVENT_DISCONNECT:
-				self.__addPendingEvent(GameEvent(EVENT_DISCONNECT))
+		while len(self.__event_list) > 0:
+			# give the core the chance to preprocess events, this is needed
+			# because if the changes were made immediately when the event was received (as opposed to when the packet is removed from queue for processing)
+			# the core's view of the game state might be incorrect
+			event =  self.__event_list.pop(0)
+			preprocessor = self.__event_preprocessors.get(event.type, None)
+			if preprocessor:
+				event = preprocessor(event)
+			if event is None: continue
+			self.__last_event_generated = event
+			
+			# this is whewrre the the events get conveyed to custom bot behaviors
+			#........
+			for bot in self.__botlist:
+				bot.HandleEvents(self,event)
+		self.flushOutboundQueues()
 				
 	def __addPendingEvent(self, game_event):
 		self.__event_list.append(game_event)
+		
 		

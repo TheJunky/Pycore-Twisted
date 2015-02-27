@@ -113,54 +113,6 @@ def LoadBot(ssbot,modulename,param,inifile,args,logger):
 	finally:
 		return bot
 
-
-def botMain(Bot,debug=False,isMaster=False,arena="#python"):
-	from Credentials import botowner, botname, botpassword
-	try:
-		logger = logging.getLogger( __name__ )
-		logger.setLevel(logging.DEBUG)	
-		
-		
-		# set a format
-		formatter = logging.Formatter('%(asctime)s:%(name)s:%(levelname)s:%(message)s')
-		
-		
-		# define a Handler which writes INFO messages or higher to the sys.stderr
-		console = logging.StreamHandler()
-		console.setLevel(logging.DEBUG)
-		# tell the handler to use this format
-		console.setFormatter(formatter)
-		# add the handler to the mainloop logger
-		logger.addHandler(console)
-	
-		
-		filehandler  = logging.FileHandler(os.getcwd()+ R"/"+  __name__  +".log",mode='a')
-		filehandler.setLevel(logging.ERROR)
-		filehandler.setFormatter(formatter)
-		logger.addHandler(filehandler)
-		
-		ssbot = SubspaceBot(debug,isMaster,None,logging.getLogger(__name__+".Core"))
-		ssbot.setBotInfo(__name__,"TestBoT", botowner)
-		
-		#get the module object for the current file...	
-		module = sys.modules[globals()['__name__']]
-		md = ModuleData("TesttBot",module,"None","test.ini","",logging.getLogger(__name__))
-		bot = Bot(ssbot,md)
-	
-		
-		ssbot.connectToServer('66.36.247.83', 7900, botname, botpassword, arena)		   
-		
-		while ssbot.isConnected():
-			event = ssbot.waitForEvent()
-			bot.HandleEvents(ssbot,event)
-	except Exception as e:
-		LogException(logger)
-		raise 
-	finally:
-		bot.Cleanup()
-		logger.critical("Testbot shutting down")
-		filehandler.close()
-
 def Pixels_To_SS_Coords(x , y):
 	try:
 		ch = "ABCDEFGHIJKLMNOPQRSTU"
