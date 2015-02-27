@@ -1,4 +1,4 @@
-masterbot requires 
+masterbot requires https://twistedmatrix.com/trac/
 tweetbot requires the twitter api
 http://code.google.com/p/python-twitter/
 simplejson is a requirement for pythontwitter
