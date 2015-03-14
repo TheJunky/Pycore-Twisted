@@ -79,7 +79,7 @@ class Bot(BotInterface):
 	def __init__(self, ssbot, md):
 		BotInterface.__init__(self,ssbot,md)
 		ssbot.registerModuleInfo(__name__,"Info/LagBot","The Junky","displays/checks players lag",".01")
-		self.pman = PlayerInfoManager(self.module.Pinfo)
+		self.setPlayerInfoOptions(self.module.Pinfo)
 
 		self.__command_handlers_dict = {
 		ssbot.registerCommand('!lag',None,0,COMMAND_LIST_PP,"info","<name>" ,"request/check players lag"): self.HClag,
@@ -96,7 +96,7 @@ class Bot(BotInterface):
 				self.__command_handlers_dict[event.command.id](ssbot,event)
 		if event.type == EVENT_MESSAGE:
 			if self.info.Parse(event.message): #returns true when all the lines of info are parsed
-				pi = self.pman.GetPlayerInfo(self.info.id.name)
+				pi = self.getPlayerInfo(self.info.id.name)
 				#self.logger.debug( self.info.id.name + " parsed")
 				pi.info=copy.deepcopy(self.info)
 				self.ProcessInfo(ssbot,self.info)
@@ -111,9 +111,6 @@ class Bot(BotInterface):
 		if event.type == EVENT_ENTER:				
 			ssbot.sendPrivateMessage(event.player,"*info")
 			self.CheckPlayerbootTimes(ssbot,event.player)
-			self.pman.SetActive(event.player.name)# for pi manager to determine when to delete old pi
-		if event.type == EVENT_LEAVE:
-			self.pman.SetInactive(event.player.name)# for pi manager to determine when to delete old pi
 		if event.type == EVENT_KILL and self.CheckKill:
 			ssbot.sendPrivateMessage(event.killer,"*info")
 			ssbot.sendPrivateMessage(event.killed,"*info")
@@ -128,7 +125,7 @@ class Bot(BotInterface):
 		if event.type == EVENT_FLAG_DROP and self.CheckFlag:
 			ssbot.sendPrivateMessage(event.player,"*info")
 	def CheckPlayerbootTimes(self,ssbot,player):
-		pi = self.pman.GetPlayerInfo(player.name)
+		pi = self.getPlayerInfo(player.name)
 		if(pi and pi.last_boot_time and time.time() -pi.last_boot_time < self.min_boot_time):
 			ssbot.sendPrivateMessage(player,"*spec")
 			ssbot.sendPrivateMessage(player,"*spec")
@@ -137,7 +134,7 @@ class Bot(BotInterface):
 			p = ssbot.findPlayerByName(event.arguments_after[0])
 			if(p):
 				#ssbot.sendReply(event,"PlayerFound")
-				pi = self.pman.GetPlayerInfo(p.name)
+				pi = self.getPlayerInfo(p.name)
 				if(pi.info and time.time() - pi.info.ticks < self.CacheTime):
 					self.PrivLag(ssbot,pi.info,event.player)
 					#ssbot.sendReply(event,"use cached info")
@@ -199,7 +196,7 @@ class Bot(BotInterface):
 		self.detailed_info = config.getint("Info","DetailedInfo",1)
 	def ProcessInfo(self,ssbot,info):
 		p = ssbot.findPlayerByName(info.id.name)
-		pi = self.pman.GetPlayerInfo(info.id.name)
+		pi = self.getPlayerInfo(info.id.name)
 		#ssbot.sendPublicMessage("processing..." + info.id.name)
 		punishment = ""
 		if(self.Enabled):
@@ -315,5 +312,11 @@ class Bot(BotInterface):
 				ssbot.sendReply(event,"Negative Packetloss: %2.2f%%" % (self.limNPL))
 			if(self.LowBandwidthTest and event.plvl):
 				ssbot.sendReply(event,"Lowbandwidth Pl: %2.2f%%" % (self.limPL4LB))
+
+
+if __name__ == '__main__':
+	botMain(Bot)
+
+
 
 	

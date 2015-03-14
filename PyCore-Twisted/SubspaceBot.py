@@ -311,7 +311,7 @@ class SubspaceBot(DatagramProtocol):
 						self.__state = STATE_CONNECTED
 						if self.__debug == True:
 							self.__log(INFO,"We got crypto, state connected")
-						self.__queueLoginPacket(self.__username, self.__password)
+						self.__queueLoginPacket(self.__username, self.__password,False)
 						self.flushOutboundQueues()
 						self.__connected = True
 						self.__last_pos_update_sent_tick = GetTickCountHs()	
@@ -399,7 +399,7 @@ class SubspaceBot(DatagramProtocol):
 					else:
 						packet = struct.pack("<BB",0x00,0x09) 
 						#print "Tailpacket_size: %d Remaining Data:%d" % (chunk_size, remaining) 
-					packet += data[0:chunk_size-1]
+					packet += data[0:chunk_size]
 					data = data[chunk_size:]
 					self.__packet_queues[priority].append(QueuedPacket(packet, True))	
 			else:
@@ -411,7 +411,7 @@ class SubspaceBot(DatagramProtocol):
 					while(len(data)> 0):
 						chunk_size = min(MAX_CHUNK,len(data))
 						packet = struct.pack("<BBI",0x00,0x0a,size) 
-						packet += data[0:chunk_size-1]
+						packet += data[0:chunk_size]
 						data = data[chunk_size:]
 						print "packet_size: %d Remaining Data:%d" % (chunk_size, len(data))
 						self.__packet_queues[priority].append(QueuedPacket(packet, True)) 
@@ -788,41 +788,7 @@ class SubspaceBot(DatagramProtocol):
 	def registerModuleInfo(self,filename,name,author,description,version):
 		self.__module_info_list.append(ModuleInfo(filename,name,author,description,version))
 
-	def __expireTimers(self):
-		"""Expires timers that are in the core's timer list."""
-		now = GetTickCountHs()
-		self.__timer_list.sort(lambda a, b: int((a.duration - TickDiff(now, a.base)) - (b.duration - TickDiff(now, b.base))))
-		
-		while self.__timer_list:
-			t = self.__timer_list[0]
-			if TickDiff(now, t.base) >= t.duration:
-				event = GameEvent(EVENT_TIMER)
-				event.id = t.id
-				event.user_data = t.user_data
-				self.__addPendingEvent(event)
-				self.__timer_list.pop(0)
-			else:
-				# since the timer list is sorted the timers after are greater and dont need to be tested
-				break
 
-	def setTimer(self, seconds, user_data=None):
-		"""Sets a timer that will generate an EVENT_TIMER event in seconds seconds.
-		
-		user_data is passed back as event.user_data during EVENT_TIMER.
-		
-		Returns a unique timer id that is passed back in EVENT_TIMER's event.id
-		when the timer expires."""
-		id = self.__next_timer_id
-		self.__next_timer_id += 1
-		self.__timer_list.append(Timer(id, seconds, user_data))
-		return id
-	
-	def deleteTimer(self,id):
-		self.__timer_list = [t for t in self.__timer_list if t.id != id]
-
-	#def deleteAllTimers(self):
-	#	self.__timer_list = []
-		
 	def __makeValidMachineID(self, machine_id):
 		"""Generates a valid machine ID."""
 		# the mid has to be in a specific format
@@ -833,8 +799,8 @@ class SubspaceBot(DatagramProtocol):
 		return struct.unpack_from('<I', mid.tostring())[0]
 	
 		
-	def __queueLoginPacket(self, username, password):
-		self.queuePacket(struct.pack("<BB32s32sIBhHhIIIIII", 0x09, 0, username, password, self.machine_id, 0, 0, 0x6f9d, 0x86, 444, 555, self.permission_id, 0, 0, 0))
+	def __queueLoginPacket(self, username, password,newuser):
+		self.queuePacket(struct.pack("<BB32s32sIBhHhIIIIII", 0x09, 1 if newuser else 0, username, password, self.machine_id, 0, 0, 0x6f9d, 0x86, 444, 555, self.permission_id, 0, 0, 0))
 		self.name = username
 		
 	def __queueArenaLoginPacket(self, arena, ship_type=SHIP_SPECTATOR):
@@ -1375,8 +1341,10 @@ class SubspaceBot(DatagramProtocol):
 		login_response, = struct.unpack_from("<B", packet, 1)
 		self.__log(DEBUG,self.__login_response[login_response])
 		if login_response == 0x01:
-			self.__sendRegistrationForm()#doesnt work
+			self.__sendRegistrationForm() #works now , fixes from toothrot
 			self.__log(INFO, "Sending Registration Form")
+			self.__queueLoginPacket(self.__username, self.__password,True)
+			self.flushOutboundQueues()
 		elif login_response in [0x00, 0x05, 0x06]:
 			pass
 		elif login_response == 0x0D: #biller down
@@ -1688,9 +1656,6 @@ class SubspaceBot(DatagramProtocol):
 				self.__queuePositionUpdatePacket()
 				self.__last_pos_update_sent_tick = now
 		
-		if TickDiff(now, self.__last_timer_expire_tick) > 100:
-			self.__expireTimers()
-			self.__last_timer_expire_tick = now
 		
 
 		#if chats have been added redo the ?Chat command
@@ -2244,12 +2209,12 @@ class SubspaceBot(DatagramProtocol):
 		assert(len(d) == size)
 		return d
 	def __sendRegistrationForm(self):#copied from twcore doesnt work, probably queueHugeChunkPacket broken?
-		packet  = struct.pack("<B32s64s32s24sBBBBBHHI40s",
+		packet  = struct.pack("<B32s64s32s24sBBBBBIHH40s",
 							0x17,
 							self.__makePaddedString("thejunky",32),
 							self.__makePaddedString("thejunky@gmail.com",64),
-							self.__makePaddedString("WTF",32),
-							self.__makePaddedString("WTF",24),
+							self.__makePaddedString("PYCore",32),
+							self.__makePaddedString("PYCore",24),
 							77,20,1,1,1,586,0xC000,2036,
 							self.__makePaddedString(self.name,40))
 		packet += (self.__makePaddedString("PYCore",40) * 14)
@@ -2274,6 +2239,7 @@ class SubspaceBot(DatagramProtocol):
 			# this is whewrre the the events get conveyed to custom bot behaviors
 			#........
 			for bot in self.__botlist:
+				bot.HandleEventsBI(self,event)
 				bot.HandleEvents(self,event)
 		self.flushOutboundQueues()
 				

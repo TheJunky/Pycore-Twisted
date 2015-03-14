@@ -117,8 +117,6 @@ class Bot(BotInterface):
 		#put any cleanup code in here this is called when bot is about to die
 		pass
 
-if __name__ == '__main__': 
-	#bot runs in this if not run by master
-	#generic main function for when you run bot in standalone mode
-	#we pass in the Bot class to the function, so it can run it for us
-	botMain(Bot,False,False,"#master")
+if __name__ == '__main__':
+	botMain(Bot)
+

@@ -163,28 +163,5 @@ class Bot(BotInterface):
 		return angle
 
 if __name__ == '__main__':
-	from Credentials import botowner, botname, botpassword
-	# create logger with 'spam_application'
-	logger = logging.getLogger('Main')
-	logger.setLevel(logging.DEBUG)
-	# create file handler which logs even debug messages
-	fh = logging.FileHandler('main.log')
-	fh.setLevel(logging.DEBUG)
-	# create console handler with a higher log level
-	ch = logging.StreamHandler()
-	ch.setLevel(logging.DEBUG)
-	# create formatter and add it to the handlers
-	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-	fh.setFormatter(formatter)
-	ch.setFormatter(formatter)
-	# add the handlers to the logger
-	logger.addHandler(fh)
-	logger.addHandler(ch)
-	
-	ssbot= SubspaceBot('66.36.247.83', 7900, botname, botpassword,'99',False,BM_STANDALONE,None,logger)
-	lp = reactor.listenUDP(0, ssbot)
-	ssbot.setReactorData(reactor,lp) # so clients can disconnect tghemselves when they get disconnect packet or master kills them
-	module = sys.modules[globals()['__name__']]
-	md = ModuleData("TesttBot",module,"None","test.ini","",logger)
-	ssbot.setBotList([Bot(ssbot,md)])
-	reactor.run()
+	botMain(Bot)
+

@@ -97,6 +97,6 @@ class Bot(BotInterface):
 	def Cleanup(self):
 		pass
 
-if __name__ == '__main__': #bot runs in this if not run by master u can ignore this 
-	botMain(Bot,False,True,"#master")
+if __name__ == '__main__':
+	botMain(Bot)
 

@@ -222,17 +222,8 @@ bot.arena is updated during this event.
 
 Sets: type, arena_list"""
 
-EVENT_TIMER = 13
-"""A timer has expired.
 
-id is the ID of the timer, returned by bot.setTimer(), of the timer that expired.
-user_data is the same user_data passed to bot.setTimer() during the timer's creation.
-
-Timers are only granular to .1 second.
-
-Sets: type, id, user_data"""
-
-EVENT_GOAL = 14
+EVENT_GOAL = 13
 """A goal was scored.
 
 freq is the frequency the goal was scored by.
@@ -242,7 +233,7 @@ This event has no associated PID with it.
 
 Sets: type, freq, points"""
 
-EVENT_FLAG_PICKUP = 15
+EVENT_FLAG_PICKUP = 14
 """Someone picked up a flag.
 
 player is the player who picked up the flag.
@@ -250,14 +241,14 @@ flag_id is the id for the flag that was picked up.
 
 Sets: type, player, flag_id, old_freq,new_freq,x,y"""
 
-EVENT_FLAG_DROP = 16
+EVENT_FLAG_DROP = 15
 """Someone dropped a flag.
 
 player is the player who dropped the flag.
 
 Sets: type, player, flag_count"""
 
-EVENT_TURRET = 17
+EVENT_TURRET = 16
 """A player attached to another player.
 
 turreter is the player who attached to another player.
@@ -266,14 +257,14 @@ old_turreted is a player if the event is a detach else it is None
 
 Sets: type, turreter, turreted,old_turreted"""
 
-EVENT_PERIODIC_REWARD = 18
+EVENT_PERIODIC_REWARD = 17
 """Freqs are periodically given rewards for the amount of flags they own.
 
 point_list is a list of (freq, points) tuples.
 
 Sets: type, point_list"""
 
-EVENT_BALL = 19
+EVENT_BALL = 18
 """Ball periodically sends update packets to the server. This event records this data.
 
 ball_id is the ID of the ball, x and y_pos hold the x and y coordinates in pixel-coordinates.
@@ -285,7 +276,7 @@ Sets: type, ball_id, x_pos, y_pos, x_vel, y_vel, player, time"""
 
 
 
-EVENT_MODULE = 20
+EVENT_MODULE = 19
 """Custom module event 
 Sets: type,event_source,event_name,event_data
 this event is so a module can share information with any other module running on the same bot
@@ -295,7 +286,7 @@ to any other module that is running
 
 """
 
-EVENT_BROADCAST = 21
+EVENT_BROADCAST = 20
 """Custom module event 
 Sets: type,bsource,bmessage
 this event is used for interbot communication 
@@ -303,12 +294,12 @@ think of it as equivilant to all the bots being on the
 same chat sending messages to eachother
 """
 
-EVENT_PRIZE = 22
+EVENT_PRIZE = 21
 """
 Sets time_stamp,x,y,prize,player
 happens when a player picksup a green
 """
-EVENT_SCORE_UPDATE = 23
+EVENT_SCORE_UPDATE = 22
 """
 Sets type,
             event.player
@@ -325,30 +316,30 @@ Sets type,
             all the new values will be
 player score will be updated at this time
 """
-EVENT_SCORE_RESET = 24
+EVENT_SCORE_RESET = 23
 """
 pid = 0xffff if all players reset
 Sets: type,pid, player player will be None if pid is 0xffff which indicates
 everyone in the arena has been reset to 0
 """
-EVENT_FLAG_UPDATE = 25
+EVENT_FLAG_UPDATE = 24
 """
 sets: type,freq,flag_id,x,y
 this is sent periodicly, it will update the position of dropped flags
 in flag drop the position of the flag wont be known until the next 
 flag update
 """
-EVENT_FLAG_VICTORY = 26
+EVENT_FLAG_VICTORY = 25
 """
 Sets:type,freq,points 
 """
-EVENT_ARENA_CHANGE = 27
+EVENT_ARENA_CHANGE = 26
 """
 Sets type,old_arena
 sent when a bot changes arenas
 """
 
-EVENT_WATCH_DAMAGE = 28
+EVENT_WATCH_DAMAGE = 27
 """
 when the bot /*watchdamage's a player the bot will get this event everytime he takes damage
 event sets:
@@ -362,15 +353,15 @@ event sets:
         event.shrap = 0 -31
         event.alternate = 1 for mines if mines/proxMines else bomb/proxbomb 
 """
-EVENT_BRICK = 29
+EVENT_BRICK = 28
 """sets  event.brick_list  where each brick is a brick class"""
 
-EVENT_SPEED_GAME_OVER = 30
+EVENT_SPEED_GAME_OVER = 29
 """
 sets bot_score,bot_rank,winners = [(rank,player,score),...]
 """
 
-EVENT_PARSER = 31
+EVENT_PARSER = 30
 PE_INFO = 1
 PE_EINFO = 2
 
@@ -584,24 +575,27 @@ class Player:
     last_pos_update_tick = None
     """The tickstamp, in hundreths of seconds, of when the player's last position update was received."""
     
-    player_info = None
-    """Reserved for a bot implementation's own use.  Should be set during EVENT_ENTER.
+    __extra_data = {}
+    """Use This To Share Data between bot classes, look at the setExtraData,GetExtraData Function in this class
+     use case example:
+     Info/LagBot Has the entire parsed  data from *info and wants to share this with other bots, perhaps an alias bot need sthe ip from it,
+     or another bot wants to use the lag info for something else. 
+     
+     so the infobot would get the  get the player p
+     then do something like p.setPlayerInfo("info",info)
+     or perhaps it just wants to set the ip and mid
+     p.setExtraData("ip",info.identity.ip)
+     p.setExtraData("mid",info.identity.mid)
+     
+     then if any other bot class  in the same bot needs that info it can check  
+     
+     ip = p.getExtraData("ip")
+     if ip not None:
+         #use ip
+         print ip
+     
     
-    For example:
-    
-    .. sourcecode:: python
-    
-        class PlayerInfo:
-            def __init__(self):
-                self.kill_count = 0
-                self.death_count = 0
-        
-        Then in EVENT_ENTER:
-            event.player.player_info = PlayerInfo()
-            
-        And in EVENT_KILL:
-            event.killer.player_info.kill_count += 1
-            event.killed.player_info.death_count += 1"""
+    """
         
     status_stealth = None
     """True if the player has stealth on, otherwise False."""
@@ -704,6 +698,8 @@ class Player:
         self.sd_portals =0
         self.sd_time = 0
         
+        self._extra_data = {}
+        
     
     def __str__(self):
         return self.name
@@ -717,6 +713,11 @@ class Player:
         self.status_flashing = status_flags & STATUS_FLASHING != 0
         self.status_safezone = status_flags & STATUS_SAFEZONE != 0
         self.status_ufo = status_flags & STATUS_UFO != 0
+        
+    def getExtraData(self,data_name):
+        return self.__extra_data.get(data_name,None)
+    def setExtraData(self,data_name,data):
+        self.__exta_data[data_name] = data  
 
 
 class Command():
